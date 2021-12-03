@@ -1,0 +1,43 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint",
+    "eslint-plugin-tsdoc",
+    "eslint-plugin-unused-imports",
+    "eslint-plugin-import"
+  ],
+  "parserOptions": {
+    "project": "tsconfig.json"
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/eslint-recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:import/typescript"
+  ],
+  "rules": {
+    "semi": "error",
+    "indent": ["error", 2],
+    "prefer-template": "warn",
+    "key-spacing": ["error", {"beforeColon": false, "afterColon": true, "mode": "strict"}],
+    //Typescript
+    "@typescript-eslint/explicit-function-return-type": "error",
+    // Import
+    "sort-imports": "off",
+    "import/order": [
+      "error",
+      {
+        "alphabetize": {
+          "order": "asc",
+          "caseInsensitive": true
+        }
+      }
+    ],
+    "import/no-unused-modules": "off",
+    "unused-imports/no-unused-imports-ts": "error",
+    "import/no-extraneous-dependencies": "error"
+  }
+}
