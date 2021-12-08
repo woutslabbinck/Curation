@@ -5,17 +5,23 @@
  * Created on 03/12/2021
  *****************************************/
 import {Session} from "@inrupt/solid-client-authn-node";
-import {Curator} from "./Curator";
-const credentials ={
-  "refreshToken": "dk2dttiWADhSJJ5m9aLryKLnUwzAqAYq",
-  "clientId": "QavV4K693DmBtZrhzzQ4yjYLilgEzaso",
-  "clientSecret": "WstewIdnkHTaqDo7yfwJZZHEnuLP17Mm",
+import {CurationConfig, Curator} from "./Curator";
+
+const credentials = {
+  "refreshToken": "dRvFxa6Dn4O22zN6IzlmtDIZt28WVsKZ",
+  "clientId": "qY343r217fwQOStZTQxQvBOZ96yuwoUN",
+  "clientSecret": "VHHK7uSon3CeTZITYRI7bOHeMbLpIUP3",
   "issuer": "https://broker.pod.inrupt.com/",
 };
-
-async function execute(){
-  const rootIRI = 'https://tree.linkeddatafragments.org/announcements/';
-  const curatedIRI = 'https://tree.linkeddatafragments.org/datasets/curated/';
+const rootIRI = 'https://tree.linkeddatafragments.org/announcements/';
+const curatedIRI = 'https://tree.linkeddatafragments.org/datasets/curated/';
+const synchronizedIRI = 'https://tree.linkeddatafragments.org/datasets/synced/';
+const config: CurationConfig = {
+  ldesIRI: rootIRI,
+  curatedIRI: curatedIRI,
+  synchronizedIRI: synchronizedIRI
+};
+async function execute() {
   const session = new Session();
 
   session.onNewRefreshToken((newToken: string): void => {
@@ -27,13 +33,23 @@ async function execute(){
     refreshToken: credentials.refreshToken,
     oidcIssuer: credentials.issuer,
   });
-  const curator = new Curator(rootIRI,session, curatedIRI);
+  const curator = new Curator(config, session);
 
   // todo most recent announcements have to come from synced LDES
   const test = await curator.mostRecentAnnouncements(10);
 
+  // todo: create a shape for curation and place it in curation (targetClass view, dataset and body
   await curator.accept(test[0]);
   // todo create a reject
   process.exit();
 }
-execute();
+
+// execute();
+
+async function synchronise() {
+  const session = new Session();
+  const curator = new Curator(config, session);
+  curator.synchronize();
+}
+
+synchronise();

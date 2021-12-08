@@ -23,10 +23,11 @@
     "typescript": "^4.5.2"
   },
   "dependencies": {
+    "@inrupt/solid-client-authn-node": "^1.11.2",
+    "@treecg/actor-init-ldes-client": "^2.5.7",
     "@treecg/ldes-announcements": "^0.0.3",
-    "n3": "^1.11.2",
     "dotenv": "^10.0.0",
-    "winston": "^3.3.3",
-    "@inrupt/solid-client-authn-node": "^1.11.2"
+    "n3": "^1.11.2",
+    "winston": "^3.3.3"
   }
 }
