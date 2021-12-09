@@ -49,7 +49,7 @@ async function execute() {
 async function synchronise() {
   const session = new Session();
   const curator = new Curator(config, session);
-  curator.synchronize();
+  await curator.synchronize();
 }
 
 synchronise();

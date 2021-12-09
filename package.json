@@ -28,6 +28,7 @@
     "@treecg/ldes-announcements": "^0.0.3",
     "dotenv": "^10.0.0",
     "n3": "^1.11.2",
-    "winston": "^3.3.3"
+    "winston": "^3.3.3",
+    "@treecg/tree-metadata-extraction": "^1.2.1"
   }
 }
