@@ -7,12 +7,13 @@
 import {Session} from "@inrupt/solid-client-authn-node";
 import {CurationConfig, Curator} from "./Curator";
 
-const credentials = {
-  "refreshToken": "dRvFxa6Dn4O22zN6IzlmtDIZt28WVsKZ",
-  "clientId": "qY343r217fwQOStZTQxQvBOZ96yuwoUN",
-  "clientSecret": "VHHK7uSon3CeTZITYRI7bOHeMbLpIUP3",
+const credentials ={
+  "refreshToken": "uTXS0OPHfhmO4epRpkU5nxEdgIM58AlB",
+  "clientId": "u1jg7Xd9eSQFqghBvyiuZ6xO3q3pVKlb",
+  "clientSecret": "uOfu9JktMlVcENGUj77qzJxVcmIud3YS",
   "issuer": "https://broker.pod.inrupt.com/",
 };
+
 const rootIRI = 'https://tree.linkeddatafragments.org/announcements/';
 const curatedIRI = 'https://tree.linkeddatafragments.org/datasets/curated/';
 const synchronizedIRI = 'https://tree.linkeddatafragments.org/datasets/synced/';
@@ -48,6 +49,15 @@ async function execute() {
 
 async function synchronise() {
   const session = new Session();
+  // session.onNewRefreshToken((newToken: string): void => {
+  //   console.log("New refresh token: ", newToken);
+  // });
+  // await session.login({
+  //   clientId: credentials.clientId,
+  //   clientSecret: credentials.clientSecret,
+  //   refreshToken: credentials.refreshToken,
+  //   oidcIssuer: credentials.issuer,
+  // });
   const curator = new Curator(config, session);
   await curator.synchronize();
 }

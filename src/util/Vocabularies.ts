@@ -84,6 +84,7 @@ export const DCT = createUriAndTermNamespace('http://purl.org/dc/terms/',
   'issued',
   'isVersionOf',
   'license',
+  'modified',
   'subject',
   'title');
 
@@ -113,8 +114,11 @@ export const TREE = createUriAndTermNamespace('https://w3id.org/tree#',
   'Node',
   'Collection',
   'member',
+  'node',
+  'relation',
   'path',
   'shape',
+  'value',
   'view');
 
 export const VOID = createUriAndTermNamespace('http://rdfs.org/ns/void#',
