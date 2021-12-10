@@ -249,7 +249,8 @@ export class Curator {
     const nowQuad = new Quad(namedNode(syncedRootNode), namedNode(DCT.issued), literal(now.toISOString(), namedNode(XSD.dateTime)));
 
     const newRelations: string[] = [];
-    const syncedMostRecentRelation = 'https://tree.linkeddatafragments.org/announcements/1638437905336/'; // todo extract properly
+    // const syncedMostRecentRelation = 'https://tree.linkeddatafragments.org/announcements/1638437905336/'; // todo extract properly
+    const syncedMostRecentRelation = this.calculateMostRecentRelation(syncedStore);
     const options = {
       "pollingInterval": 5000, // millis
       "representation": "Quads", //Object or Quads
@@ -263,6 +264,7 @@ export class Curator {
       console.log(member);
     });
     eventstreamSync.on('metadata', ({treeMetadata, url}) => {
+      const syncTranslation = url.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
       if (url === LDESRootNode) {
         const newRelationsStore = new Store();
         const metadataRelations = treeMetadata.nodes.get(url).relation;
@@ -289,6 +291,7 @@ export class Curator {
 
             newRelations.push(node["@id"]);
           }
+
         });
 
         patchQuads(syncedRootNode, this.session,
@@ -301,7 +304,7 @@ export class Curator {
 
       } else {
         // if relation is new, do same as first time
-        if (newRelations.includes(url)) {
+        if (newRelations.includes(syncTranslation)) {
           fetchResourceAsStore(url, this.session).then(store => {
             const collection = this.extractMembers(store, url, LDESRootCollectionIRI);
 
@@ -313,7 +316,7 @@ export class Curator {
               this.logger.error(`Could not update part of collection at ${collectionIRI}`);
             });
           });
-        } else if (url === syncedMostRecentRelation) {
+        } else if (syncTranslation === syncedMostRecentRelation) {
           fetchResourceAsStore(url, this.session).then(store => {
             const potentialMembers = store.getObjects(null, LDP.contains, null).map(object => object.id);
             const members: string[] = [];
@@ -359,6 +362,25 @@ export class Curator {
         });
       this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
     });
+  }
+
+  private calculateMostRecentRelation(syncedStore: Store): string {
+    const relationValues = syncedStore.getQuads(null, TREE.value, null, null);
+    let maxValue = 0;
+    const relationMap: Map<number, string> = new Map();
+    relationValues.forEach(quad => {
+      const time = this.extractTimeFromLiteral(quad.object as Literal);
+      if (time >= maxValue) {
+        maxValue = time;
+      }
+      const nodeId = syncedStore.getQuads(quad.subject, TREE.node, null, null)[0].object.id;
+      relationMap.set(time, nodeId);
+    });
+    const mostRecentRelation = relationMap.get(maxValue);
+    if (!mostRecentRelation){
+      throw Error('not possible');
+    }
+    return mostRecentRelation;
   }
 
   private extractTimeFromLiteral(dateTimeLiteral: Literal): number {
