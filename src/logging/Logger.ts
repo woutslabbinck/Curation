@@ -14,7 +14,7 @@ export class Logger {
 
   constructor(loggable: Instance | string) {
     const label = typeof loggable === 'string' ? loggable : loggable.constructor.name;
-    const level = process.env.LOGGER_LEVEL ? process.env.LOGGER_LEVEL : 'info';
+    const level: LogLevel = process.env.LOGGER_LEVEL && isLogLevel(process.env.LOGGER_LEVEL)? process.env.LOGGER_LEVEL : 'info';
 
     this.logger = createLogger({
       level: level,
@@ -69,7 +69,12 @@ export class Logger {
 
 }
 
-type LogLevel = 'error' | 'warn' | 'info' | 'verbose' | 'debug' | 'silly';
+const logLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
+export type LogLevel = typeof logLevels[number];
+
+export function isLogLevel(value: string): value is LogLevel {
+  return logLevels.includes(value as LogLevel);
+}
 
 interface Instance {
     constructor: { name: string };

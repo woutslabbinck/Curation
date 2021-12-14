@@ -23,6 +23,7 @@ export async function fetchResourceAsStore(iri: string, session: Session): Promi
     logger.debug(`${iri} Could not be fetched | ${response.statusText}`);
     throw Error(`Failed fetching resource at ${iri}`);
   }
+  logger.debug(`${iri} fetched`);
   const text = await response.text();
   return await turtleStringToStore(text);
 }
@@ -33,6 +34,25 @@ export async function putLDJSON(iri: string, session: Session, body: string): Pr
 
 export async function putTurtle(iri: string, session: Session, body: string): Promise<Response> {
   return await putResource(iri, session, body, 'text/turtle');
+}
+
+export async function postResource(containerIRI: string, session: Session, body: string, contentType: string): Promise<Response> {
+  const response = await session.fetch(containerIRI, {
+    method: "POST",
+    headers: {
+      "Content-Type": contentType,
+      "Link": `<http://www.w3.org/ns/ldp#Resource>; rel="type"`
+    },
+    body: body
+  });
+  if (response.status === 201) {
+    logger.debug(`Created resource at ${response.url} | status: ${response.status}`);
+  } else {
+    logger.debug(`Resource was not created at ${containerIRI} | ${response.statusText}`);
+    console.log(await response.text());
+    throw Error(`Failed creating resource at ${containerIRI}`);
+  }
+  return response;
 }
 
 export async function putResource(iri: string, session: Session, body: string, contentType: string): Promise<Response> {
@@ -82,13 +102,9 @@ export enum SPARQL {
 }
 
 export async function patchQuads(iri: string, session: Session, quads: Quad[], type: SPARQL): Promise<Response> {
+  const writer = new Writer();
   let sparqlQuery = `${type} {`;
-  const writer =new Writer();
   sparqlQuery = sparqlQuery.concat(writer.quadsToString(quads));
-  //   quads.forEach(quad => {
-  //     sparqlQuery = sparqlQuery.concat(`
-  // ${writer.quadToString(quad.subject, quad.predicate, quad.object)} `);
-  //   });
   sparqlQuery = sparqlQuery.concat(` 
       }`);
   const response = await session.fetch(iri, {
@@ -107,4 +123,3 @@ export async function patchQuads(iri: string, session: Session, quads: Quad[], t
   }
   return response;
 }
-
