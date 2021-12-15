@@ -116,7 +116,7 @@ export class Curator {
   }
 
   /**
-     * TODO fix parameters
+     * TODO fix parameters -> make it possible to only give iri
      * @param member
      * @param memberIRI
      * @param timestamp
@@ -376,8 +376,8 @@ export class Curator {
       const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
 
       if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${iri}${member}`);
-      collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(iri + member)); // needed because CSS only gives last part of iri
-      collection.addQuad(namedNode(iri + member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
+      collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(member));
+      collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
     });
     return collection;
   }
@@ -477,10 +477,10 @@ export class Curator {
             collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(RDF.type), namedNode(TREE.Collection));
             members.forEach((member: string) => {
               const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
-              if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${url}${member}`);
+              if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${member}`);
 
-              collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(url + member)); // url has to be added
-              collection.addQuad(namedNode(url + member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
+              collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode( member));
+              collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
             });
 
             // iri where the part of the collection should be stored
@@ -490,7 +490,7 @@ export class Curator {
               console.log(error);
               this.logger.error(`Could not update part of collection at ${collectionIRI}`);
             });
-            this.logger.info(`${collectionIRI} was updated with ${collection.getQuads(null, null, null, null).length - 1} members.`);
+            this.logger.info(`${collectionIRI} was updated with ${collection.getQuads(null, TREE.member, null, null).length} members.`);
           });
         }
       }

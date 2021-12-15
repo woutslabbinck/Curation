@@ -25,7 +25,7 @@ export async function fetchResourceAsStore(iri: string, session: Session): Promi
   }
   logger.debug(`${iri} fetched`);
   const text = await response.text();
-  return await turtleStringToStore(text);
+  return await turtleStringToStore(text, iri);
 }
 
 export async function putLDJSON(iri: string, session: Session, body: string): Promise<Response> {

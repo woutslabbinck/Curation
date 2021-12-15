@@ -36,8 +36,8 @@ export async function stringToStore(text: string, options: ParseOptions): Promis
   return await storeStream(quadStream);
 }
 
-export async function memberToString(member: DataSet | DataService | View, baseIRI?:string){
-  const store = await ldjsonToStore(JSON.stringify(member),baseIRI);
+export async function memberToString(member: DataSet | DataService | View, baseIRI?: string) {
+  const store = await ldjsonToStore(JSON.stringify(member), baseIRI);
   return storeToString(store);
 
 }
