@@ -8,10 +8,10 @@ import {Session} from "@inrupt/solid-client-authn-node";
 import {CurationConfig, Curator} from "./Curator";
 import { memberToString} from "./util/Conversion";
 
-const credentials ={
-  "refreshToken": "v84B1OeQH7ciKylqKDmb0Z8OLYW3hS9G",
-  "clientId": "Y7I7qTjVAcTBZJSnrGjwOHwDKu27smxs",
-  "clientSecret": "mfSETB4UHXsHE7hM6V9iByv8a0arjjFT",
+const credentials = {
+  "refreshToken": "UbBUxyS96o7Fi43HJezMAcctRRtOPnv7",
+  "clientId": "RzZGgFCDmxosLRhm3P0g2VwewjKGMR2s",
+  "clientSecret": "uXuXg1yEpJmOB7uCURGahcI4jUM9jk1J",
   "issuer": "https://broker.pod.inrupt.com/",
 };
 
@@ -55,23 +55,24 @@ async function rejectNewestMember(curator:Curator) {
 }
 async function run(){
   const session = new Session();
-  // session.onNewRefreshToken((newToken: string): void => {
-  //   console.log("New refresh token: ", newToken);
-  // });
-  // await session.login({
-  //   clientId: credentials.clientId,
-  //   clientSecret: credentials.clientSecret,
-  //   refreshToken: credentials.refreshToken,
-  //   oidcIssuer: credentials.issuer,
-  // });
+  session.onNewRefreshToken((newToken: string): void => {
+    console.log("New refresh token: ", newToken);
+  });
+  await session.login({
+    clientId: credentials.clientId,
+    clientSecret: credentials.clientSecret,
+    refreshToken: credentials.refreshToken,
+    oidcIssuer: credentials.issuer,
+  });
   const curator = new Curator(config, session);
-  // await synchronise(curator);
   console.log(new Date());
-  await extractMember(curator);
-  await extractMembers(curator);
-  // await acceptNewestMember(curator);
+  // await curator.init();
+  // await synchronise(curator);
+  // await extractMember(curator);
+  // await extractMembers(curator);
+  await acceptNewestMember(curator);
   // await rejectNewestMember(curator);
-
+  process.exit();
 }
 
 run();

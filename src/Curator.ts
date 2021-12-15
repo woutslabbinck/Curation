@@ -1,6 +1,6 @@
 /***************************************
  * Title: Curator
- * Description: TODO
+ * Description: Contains the class with methods to curate an LDES in LDP, creating a curated LDES in LDP
  * Author: Wout Slabbinck (wout.slabbinck@ugent.be)
  * Created on 03/12/2021
  *****************************************/
@@ -11,7 +11,7 @@ import {DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/I
 import {extractMetadata} from "@treecg/tree-metadata-extraction";
 import {Collection, Node, Relation, URI} from "@treecg/tree-metadata-extraction/dist/util/Util";
 import {DataFactory, Literal, Quad, Store} from "n3";
-import {LDESinSolid} from '../../LDES-Orchestrator'; // todo: make package and do real import
+import {ACLConfig, LDESConfig, LDESinSolid, AccessSubject} from '../../LDES-Orchestrator'; // todo: make package and do real import
 import {Logger} from "./logging/Logger";
 import {memberToString, storeToString, stringToStore} from "./util/Conversion";
 import {
@@ -37,7 +37,6 @@ export interface CurationConfig {
 }
 
 export class Curator {
-
   private readonly logger = new Logger(this);
   // root of LDES
   private ldesIRI: string;
@@ -53,9 +52,67 @@ export class Curator {
     this.session = session;
   }
 
+  /**
+     * Checks whether the user is logged in
+     * Load the curatedLDES in Solid
+     * Creates the curatedLDES in Solid if it does not exist (requires certain access control permissions on the curated IRI)
+     * Furthermore verifies that the LDES exists as well.
+     * @returns {Promise<void>}
+     */
   public async init(): Promise<void> {
-    const config = await LDESinSolid.getConfig(this.curatedIRI, this.session);
-    this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
+    if (!this.session.info.isLoggedIn) {
+      this.logger.error(`Contents of the session: ${JSON.stringify(this.session.info)}`);
+      throw Error("Session is not logged in");
+    }
+
+    let config: { ldesConfig: LDESConfig, aclConfig: ACLConfig } | undefined = undefined;
+    try {
+      config = await LDESinSolid.getConfig(this.curatedIRI, this.session);
+    } catch (e) {
+      this.logger.info(`No curated LDES in LDP exist yet at ${this.curatedIRI}`);
+    }
+
+    let ldesStore: Store;
+    try {
+      ldesStore = await fetchResourceAsStore(`${this.ldesIRI}root.ttl`, this.session);
+    } catch (e) {
+      this.logger.error(`LDES in LDP does not exist at ${this.ldesIRI}`);
+      throw Error("LDES in LDP does not exist");
+    }
+
+    if (config) {
+      this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
+    } else {
+      const treeShape = ldesStore.getObjects(null, TREE.shape, null); // TODO: what shape should the curated set have? -> Currently this will make it fail as I manually have to remove the shape
+      const relations = ldesStore.getObjects(null, TREE.relation, null);
+
+      if (relations.length === 0) {
+        throw Error('Original LDES root node currently no relations.');
+      }
+
+      if (treeShape.length === 0) {
+        throw Error('Original LDES has currently no shape.');
+      }
+      const bn = relations[0].id;
+      const relationType = ldesStore.getObjects(bn, RDF.type, null);
+      const treePath = ldesStore.getObjects(null, TREE.path, null);
+
+      config = {
+        aclConfig: {
+          agent: this.session.info.webId! // I know it exists
+        },
+        ldesConfig: {
+          base: this.curatedIRI,
+          treePath: treePath[0].id,
+          shape: treeShape[0].id,
+          relationType: relationType[0].id,
+        }
+      };
+      this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
+      this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent); // note: Currently creates private curated LDES in Solid
+
+      this.logger.info(`Created curated LDES in Solid at ${this.curatedIRI}`);
+    }
   }
 
   /**
@@ -83,18 +140,17 @@ export class Curator {
     } catch (e) {
       this.logger.error('Something failed');
       console.log(e);
-      throw Error(); // TODO: make more clear?
+      throw Error(`Could not add the member to ${this.curatedIRI}`);
     }
   }
 
   public async reject(memberIRI: string, timestamp: number): Promise<Response> {
-
     const response = await this.removeFromSyncedCollection(memberIRI, timestamp);
     return response;
   }
 
 
-  private async removeFromSyncedCollection(memberIRI: string, timestamp: number) {
+  private async removeFromSyncedCollection(memberIRI: string, timestamp: number): Promise<Response> {
     const syncedLocation = memberIRI.replace(this.ldesIRI, this.synchronizedIRI).split('/').slice(0, -1).join('/'); // NOTE: maybe better to follow the relations? not speed wise but logic wise
     const memberQuad = new Quad(namedNode(`${this.ldesIRI}root.ttl#Collection`), namedNode(TREE.member), namedNode(memberIRI));
     const timeQuad = new Quad(namedNode(memberIRI), namedNode(DCT.modified), this.timestampToLiteral(timestamp));
@@ -107,12 +163,12 @@ export class Curator {
   /**
      * Synchronize the Synced collection with the LDES in LDP
      *
-     * The synced collection is a TREE collection with as members the URIs of the LDES in LDP.
+     * The synced collection is a TREE collection with as members the URIs of the LDES in LDP. Each member also has a timestamp.
      * A synchronize operations looks at the last synced time and adds all members which were added to the LDES to the synced collection.
      *
      * @returns {Promise<void>}
      */
-  public async synchronize() {
+  public async synchronize(): Promise<void> {
     const LDESRootNode = `${this.ldesIRI}root.ttl`;
     const LDESRootCollectionIRI = `${LDESRootNode}#Collection`;
     const syncedRootNode = `${this.synchronizedIRI}root.ttl`;
@@ -190,7 +246,7 @@ export class Curator {
      * @param syncedRootNode IRI of the root node of the synced collection
      * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
      */
-  private async firstTimeSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string) {
+  private async firstTimeSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string): Promise<void> {
     const options = {
       "pollingInterval": 5000, // millis
       "representation": "Quads", //Object or Quads
@@ -233,7 +289,10 @@ export class Curator {
           if (relation.node && relation.node[0]) {
             // change relation of node -> again clone it otherwise the original node is changed
             relation.node = [...relation.node];
-            relation.node[0] = {"@id": relation.node[0]['@id'].replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1)};
+            relation.node[0] = {
+              "@id": this.ldesRelationToSyncedRelationIRI(relation.node[0]['@id'])
+            }
+            ;
           }
           view.relation?.push(relationIRI); // I just defined it, believe me it's there
           relations.push(relation);
@@ -248,22 +307,12 @@ export class Curator {
         });
 
       } else {
-        // get all member URIs and add them as member to collection, then post them to {syncedURI}/timestamp
-        fetchResourceAsStore(url, this.session).then(store => {
-          const collection = this.extractMembers(store, url, LDESRootCollectionIRI);
-
-          const body = storeToString(collection);
-          // iri where the part of the collection should be stored
-          const collectionIRI = url.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
-          putTurtle(collectionIRI, this.session, body).catch(error => {
-            console.log(error);
-            this.logger.error(`Could not update part of collection at ${collectionIRI}`);
-          });
-        });
+        this.synchronizeMembersFromRelation(url, LDESRootCollectionIRI);
       }
     });
     eventstreamSync.on('end', () => {
       this.logger.info("LDESClient finds no more data");
+      return;
     });
   }
 
@@ -271,15 +320,15 @@ export class Curator {
      * Retrieve the URIs of the most recent members of the synced collection.
      * @param amount number of members that are needed
      * @param startPoint Startpoint in the synced collection
-     * @returns {Promise<{timestamp: number, memberIRI: string, relationIRI: string}[]>} sorted list (newest members first)
+     * @returns {Promise<{timestamp: number, memberIRI: string}[]>} sorted list (newest members first)
      */
   public async getRecentMembers(amount: number, startPoint?: number): Promise<{ timestamp: number, memberIRI: string }[]> {
-    // dumb get all member ids
-    const syncedroot = `${this.synchronizedIRI}root.ttl`;
-    const memberStore = await fetchResourceAsStore(syncedroot, this.session);
-    const metadata = await extractMetadata(memberStore.getQuads(null, null, null, null));
+    // get all member ids
+    const syncedRootIRI = `${this.synchronizedIRI}root.ttl`;
+    const memberStore = await fetchResourceAsStore(syncedRootIRI, this.session);
+    const syncedMetadata = await extractMetadata(memberStore.getQuads(null, null, null, null));
     const relationIRIs: string[] = [];
-    metadata.relations.forEach(relation => relationIRIs.push(relation.node[0]["@id"]));
+    syncedMetadata.relations.forEach(relation => relationIRIs.push(relation.node[0]["@id"]));
 
     const promiseStores: Promise<Store>[] = [];
     for (const iri of relationIRIs) {
@@ -300,16 +349,14 @@ export class Curator {
         memberIRI
       });
     });
-    this.logger.info(`Members extracted from ${syncedroot}`);
+    this.logger.info(`Members extracted from ${syncedRootIRI}`);
 
     // sort them
     timeSortedMembers.sort((first, second) =>
       second.timestamp - first.timestamp);
 
-    // extract the ones asked in the function and return them | todo optimise with Promise all
+    // extract the ones asked in the function and return them
     return timeSortedMembers.slice(startPoint, amount);
-    // return timeSortedMembers.slice(startPoint, amount).map( async element => await this.extractAnnouncement(element.memberIRI));
-
   }
 
   /**
@@ -343,7 +390,7 @@ export class Curator {
      * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
      * @param syncedStore The store of the synced root node
      */
-  private async otherTimesSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string, syncedStore: Store) {
+  private async otherTimesSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string, syncedStore: Store): Promise<void> {
     const syncQuads = syncedStore.getQuads(syncedRootNode, DCT.issued, null, null);
     if (syncQuads.length !== 1) {
       throw Error(`Can't find last time synced at ${syncedRootNode}.`);
@@ -366,7 +413,8 @@ export class Curator {
       console.log(member);
     });
     eventstreamSync.on('metadata', ({treeMetadata, url}) => {
-      const syncTranslation = url.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
+      const syncTranslation = this.ldesRelationToSyncedRelationIRI(url);
+
       if (url === LDESRootNode) {
         const newRelationsStore = new Store();
         const metadataRelations = treeMetadata.nodes.get(url).relation;
@@ -378,7 +426,10 @@ export class Curator {
             throw Error('relation parts are not in this relation');
           }
           let node: Node = {...relation.node[0]};
-          node = {"@id": node['@id'].replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1)};
+          node = {
+            "@id": this.ldesRelationToSyncedRelationIRI(node['@id'])
+          }
+          ;
           const exists = syncedStore.getQuads(null, TREE.node, node["@id"], null).length === 1;
 
           // only if it doesn't exist yet, should the root be patched
@@ -408,17 +459,7 @@ export class Curator {
       } else {
         // if relation is new, do same as first time
         if (newRelations.includes(syncTranslation)) {
-          fetchResourceAsStore(url, this.session).then(store => {
-            const collection = this.extractMembers(store, url, LDESRootCollectionIRI);
-
-            const body = storeToString(collection);
-            // iri where the part of the collection should be stored
-            const collectionIRI = url.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
-            putTurtle(collectionIRI, this.session, body).catch(error => {
-              console.log(error);
-              this.logger.error(`Could not update part of collection at ${collectionIRI}`);
-            });
-          });
+          this.synchronizeMembersFromRelation(url, LDESRootCollectionIRI);
         } else if (syncTranslation === syncedMostRecentRelation) {
           // current url is the most recent relation -> Only add the most recent members
           fetchResourceAsStore(url, this.session).then(store => {
@@ -443,7 +484,7 @@ export class Curator {
             });
 
             // iri where the part of the collection should be stored
-            const collectionIRI = url.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
+            const collectionIRI = this.ldesRelationToSyncedRelationIRI(url);
             patchQuads(collectionIRI, this.session,
               collection.getQuads(null, null, null, null), SPARQL.INSERT).catch(error => {
               console.log(error);
@@ -468,9 +509,30 @@ export class Curator {
           this.logger.error(`Could not delete old DCTERMS issued at ${syncedRootNode}`);
         });
       this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
+      return;
     });
   }
 
+  private async synchronizeMembersFromRelation(iri: string, LDESRootCollectionIRI: string): Promise<void> {
+    // get all member URIs and add them as member to collection, then post them to {syncedURI}/timestamp
+
+    const store = await fetchResourceAsStore(iri, this.session);
+    const collection = this.extractMembers(store, iri, LDESRootCollectionIRI);
+    const body = storeToString(collection);
+
+    // iri where the part of the collection should be stored
+    const collectionIRI = this.ldesRelationToSyncedRelationIRI(iri);
+    putTurtle(collectionIRI, this.session, body).catch(error => {
+      console.log(error);
+      this.logger.error(`Could not update part of collection at ${collectionIRI}`);
+    });
+  }
+
+  /**
+     * Using a store containing several relations, calculate the most recent relation
+     * @param syncedStore
+     * @returns {any}
+     */
   private calculateMostRecentRelation(syncedStore: Store): string {
     const relationValues = syncedStore.getQuads(null, TREE.value, null, null);
     let maxValue = 0;
@@ -504,4 +566,16 @@ export class Curator {
     return literal(dateTime.toISOString(), namedNode(XSD.dateTime));
   }
 
+  /**
+     * Transforms an ldes relation iri to a synchronized relation iri
+     * E.g. ldesIRI is "https://tree.linkeddatafragments.org/announcements/"
+     * and synchronizedIRI is "https://tree.linkeddatafragments.org/datasets/synced/"
+     * Then "https://tree.linkeddatafragments.org/announcements/1636985640000/" becomes
+     * "https://tree.linkeddatafragments.org/datasets/synced/1636985640000"
+     * @param iri
+     * @returns {string}
+     */
+  private ldesRelationToSyncedRelationIRI(iri: string): string {
+    return iri.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
+  }
 }
