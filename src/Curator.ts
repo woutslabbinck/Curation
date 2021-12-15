@@ -104,12 +104,12 @@ export class Curator {
         ldesConfig: {
           base: this.curatedIRI,
           treePath: treePath[0].id,
-          shape: treeShape[0].id,
+          shape: 'https://tree.linkeddatafragments.org/datasets/shape',// TODO: add this shape to config?
           relationType: relationType[0].id,
         }
       };
       this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
-      this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent); // note: Currently creates private curated LDES in Solid
+      await this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent); // note: Currently creates private curated LDES in Solid
 
       this.logger.info(`Created curated LDES in Solid at ${this.curatedIRI}`);
     }
