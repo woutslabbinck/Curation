@@ -114,3 +114,9 @@ const timestamp = 123456789; // already fetched previously
 await curator.reject(uri, timestamp);
 ```
 
+## Notes
+
+Currently it is possible to reject the same member multiple times
+Also accepting the same member multiple is possible. Especially when accepting this is not allowed
+
+Can be fixed by checking before an accept in the collection if it exists in the syncrhonized collection. Only when it's in there, it should be added to the curated ldes.

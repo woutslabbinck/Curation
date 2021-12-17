@@ -118,16 +118,25 @@ export class Curator {
   }
 
   /**
-     * TODO fix parameters -> make it possible to only give iri
-     * @param member
+     * TODO add comment
      * @param memberIRI
-     * @param timestamp
      * @returns {Promise<Response>}
      */
-  public async accept(member: DataSet | DataService | View, memberIRI: string, timestamp: number): Promise<Response> {
+  public async accept(memberIRI: string): Promise<Response>
+  public async accept(memberIRI: string, member: DataSet | DataService | View, timestamp: number): Promise<Response>
+  public async accept(memberIRI: string, member?: DataSet | DataService | View, timestamp?: number): Promise<Response> {
     if (!this.curatedLDESinSolid) {
       throw Error("First execute function init() as the curated LDES was not initialised yet");
     }
+
+    if (!timestamp) {
+      timestamp = await this.getTimestamp(memberIRI);
+    }
+    if (!member) {
+      const extracted = await this.extractMember(memberIRI);
+      member = extracted.value;
+    }
+
     const containerIRI = await this.curatedLDESinSolid.getCurrentContainer();
     this.logger.debug(`Posting contents of ${member["@id"]} to ${containerIRI}.`);
 
@@ -146,9 +155,22 @@ export class Curator {
     }
   }
 
-  public async reject(memberIRI: string, timestamp: number): Promise<Response> {
+  public async reject(memberIRI: string, timestamp?: number): Promise<Response> {
+    if (!timestamp) {
+      timestamp = await this.getTimestamp(memberIRI);
+    }
     const response = await this.removeFromSyncedCollection(memberIRI, timestamp);
     return response;
+  }
+
+  private async getTimestamp(iri: string): Promise<number> {
+    const response = await this.session.fetch(iri, {
+      method: "HEAD"
+    });
+    const lastModifiedHeader = response.headers.get('Last-modified');
+    if (!lastModifiedHeader) throw Error(`Resource ${iri} has no Last-modified header.`);
+    const dateLastModified = new Date(lastModifiedHeader);
+    return dateLastModified.getTime();
   }
 
 
@@ -197,7 +219,7 @@ export class Curator {
     }
 
     // wait till it has synced -> maybe this should go in the individual sync methods?
-    while(!this.synchronizationCompleted){
+    while (!this.synchronizationCompleted) {
       const sleep = (ms: number): Promise<any> => new Promise(resolve => setTimeout(resolve, ms));
       await sleep(1000);
     }
@@ -309,7 +331,7 @@ export class Curator {
         const body = [collection, view, ...relations];
 
         const bodyStore = await ldjsonToStore(JSON.stringify(body));
-        const turtleBody  = storeToString(bodyStore);
+        const turtleBody = storeToString(bodyStore);
         // place root to syncedURI
         putTurtle(syncedRootNode, this.session, turtleBody).catch(error => {
           console.log(error);
@@ -335,7 +357,13 @@ export class Curator {
   public async getRecentMembers(amount: number, startPoint?: number): Promise<{ timestamp: number, memberIRI: string }[]> {
     // get all member ids
     const syncedRootIRI = `${this.synchronizedIRI}root.ttl`;
-    const memberStore = await fetchResourceAsStore(syncedRootIRI, this.session);
+    let memberStore: Store;
+    try {
+      memberStore = await fetchResourceAsStore(syncedRootIRI, this.session);
+    } catch (e) {
+      this.logger.error('Synchronized root does not exist yet. Call the synchronize() method first before members of the LDES can be retrieved');
+      return [];
+    }
     const syncedMetadata = await extractMetadata(memberStore.getQuads(null, null, null, null));
     const relationIRIs: string[] = [];
     syncedMetadata.relations.forEach(relation => relationIRIs.push(relation.node[0]["@id"]));
@@ -489,7 +517,7 @@ export class Curator {
               const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
               if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${member}`);
 
-              collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode( member));
+              collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(member));
               collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
             });
 

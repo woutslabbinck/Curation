@@ -49,7 +49,7 @@ async function acceptNewestMember(curator:Curator) {
   const members = await curator.getRecentMembers(1);
   const member = await curator.extractMember(members[0].memberIRI);
 
-  await curator.accept(member.value, members[0].memberIRI, members[0].timestamp );
+  await curator.accept(members[0].memberIRI,member.value,  members[0].timestamp );
 }
 
 async function rejectNewestMember(curator:Curator) {
