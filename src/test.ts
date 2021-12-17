@@ -71,6 +71,7 @@ async function run(){
   console.log(new Date());
   // await curator.init();
   await synchronise(curator);
+  console.log('syncing done');
   // await extractMember(curator);
   // await extractMembers(curator);
   // await acceptNewestMember(curator); // TODO test again?

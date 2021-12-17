@@ -13,13 +13,12 @@ import {Collection, Node, Relation, URI} from "@treecg/tree-metadata-extraction/
 import {DataFactory, Literal, Quad, Store} from "n3";
 import {ACLConfig, LDESConfig, LDESinSolid, AccessSubject} from '../../LDES-Orchestrator'; // todo: make package and do real import
 import {Logger} from "./logging/Logger";
-import {memberToString, storeToString, stringToStore} from "./util/Conversion";
+import {ldjsonToStore, memberToString, storeToString, stringToStore} from "./util/Conversion";
 import {
   fetchResourceAsStore,
   patchQuads,
   postResource,
   putContainer,
-  putLDJSON,
   putTurtle,
   SPARQL
 } from "./util/SolidCommunication";
@@ -44,12 +43,15 @@ export class Curator {
   private curatedIRI: string;
   private synchronizedIRI: string;
   private curatedLDESinSolid: LDESinSolid | undefined;
+  // this field allows waiting for the synchronization process.
+  private synchronizationCompleted: boolean;
 
   constructor(config: CurationConfig, session: Session) {
     this.curatedIRI = config.curatedIRI;
     this.ldesIRI = config.ldesIRI;
     this.synchronizedIRI = config.synchronizedIRI;
     this.session = session;
+    this.synchronizationCompleted = false;
   }
 
   /**
@@ -173,6 +175,7 @@ export class Curator {
     const LDESRootCollectionIRI = `${LDESRootNode}#Collection`;
     const syncedRootNode = `${this.synchronizedIRI}root.ttl`;
 
+    this.synchronizationCompleted = false;
 
     const response = await this.session.fetch(syncedRootNode);
 
@@ -191,7 +194,12 @@ export class Curator {
       await putContainer(this.synchronizedIRI, this.session);
 
       await this.firstTimeSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI);
+    }
 
+    // wait till it has synced -> maybe this should go in the individual sync methods?
+    while(!this.synchronizationCompleted){
+      const sleep = (ms: number): Promise<any> => new Promise(resolve => setTimeout(resolve, ms));
+      await sleep(1000);
     }
   }
 
@@ -258,7 +266,7 @@ export class Curator {
     eventstreamSync.on('data', (member) => {
       console.log(member);
     });
-    eventstreamSync.on('metadata', ({treeMetadata, url}) => {
+    eventstreamSync.on('metadata', async ({treeMetadata, url}) => {
       // console.log(treeMetadata);
       // is it a root?
       if (url === LDESRootNode) {
@@ -300,8 +308,10 @@ export class Curator {
 
         const body = [collection, view, ...relations];
 
+        const bodyStore = await ldjsonToStore(JSON.stringify(body));
+        const turtleBody  = storeToString(bodyStore);
         // place root to syncedURI
-        putLDJSON(syncedRootNode, this.session, JSON.stringify(body)).catch(error => {
+        putTurtle(syncedRootNode, this.session, turtleBody).catch(error => {
           console.log(error);
           this.logger.error(`Could not create root at ${syncedRootNode}`);
         });
@@ -312,7 +322,7 @@ export class Curator {
     });
     eventstreamSync.on('end', () => {
       this.logger.info("LDESClient finds no more data");
-      return;
+      this.synchronizationCompleted = true;
     });
   }
 
@@ -509,7 +519,7 @@ export class Curator {
           this.logger.error(`Could not delete old DCTERMS issued at ${syncedRootNode}`);
         });
       this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
-      return;
+      this.synchronizationCompleted = true;
     });
   }
 
