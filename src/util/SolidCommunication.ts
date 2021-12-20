@@ -1,6 +1,6 @@
 /***************************************
  * Title: SolidCommunication
- * Description: TODO
+ * Description: utility functions for authenticated communication to a solid pod
  * Author: Wout Slabbinck (wout.slabbinck@ugent.be)
  * Created on 10/12/2021
  *****************************************/
@@ -114,7 +114,6 @@ export async function patchQuads(iri: string, session: Session, quads: Quad[], t
     },
     body: sparqlQuery
   });
-    // todo debug
   if (response.status === 205) {
     logger.debug(`Updated contents at ${iri} | status: ${response.status}`);
   } else {

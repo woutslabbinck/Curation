@@ -8,10 +8,10 @@ import {Session} from "@inrupt/solid-client-authn-node";
 import {EventStream, LDESClient, newEngine} from '@treecg/actor-init-ldes-client';
 import {extractAnnouncementsMetadata} from "@treecg/ldes-announcements";
 import {DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/Interfaces";
+import {ACLConfig, LDESConfig, LDESinSolid, AccessSubject} from "@treecg/ldes-orchestrator";
 import {extractMetadata} from "@treecg/tree-metadata-extraction";
 import {Collection, Node, Relation, URI} from "@treecg/tree-metadata-extraction/dist/util/Util";
 import {DataFactory, Literal, Quad, Store} from "n3";
-import {ACLConfig, LDESConfig, LDESinSolid, AccessSubject} from '../../LDES-Orchestrator'; // todo: make package and do real import
 import {Logger} from "./logging/Logger";
 import {ldjsonToStore, memberToString, storeToString, stringToStore} from "./util/Conversion";
 import {
@@ -25,9 +25,6 @@ import {
 import {DCAT, DCT, LDP, RDF, TREE, XSD} from "./util/Vocabularies";
 import namedNode = DataFactory.namedNode;
 import literal = DataFactory.literal;
-
-
-const parse = require('parse-link-header');
 
 export interface CurationConfig {
     ldesIRI: string,
@@ -85,7 +82,7 @@ export class Curator {
     if (config) {
       this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
     } else {
-      const treeShape = ldesStore.getObjects(null, TREE.shape, null); // TODO: what shape should the curated set have? -> Currently this will make it fail as I manually have to remove the shape
+      const treeShape = ldesStore.getObjects(null, TREE.shape, null); // NOTE: I don't use this anymore as I manually add a shape in the ldesConfig
       const relations = ldesStore.getObjects(null, TREE.relation, null);
 
       if (relations.length === 0) {
@@ -118,7 +115,7 @@ export class Curator {
   }
 
   /**
-     * TODO add comment
+     * Accept a member to the curated LDES
      * @param memberIRI
      * @returns {Promise<Response>}
      */

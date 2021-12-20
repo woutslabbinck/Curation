@@ -1,12 +1,12 @@
 /***************************************
- * Title: test.ts
+ * Title: tests.ts
  * Description: TODO
  * Author: Wout Slabbinck (wout.slabbinck@ugent.be)
  * Created on 15/12/2021
  *****************************************/
 import {Session} from "@inrupt/solid-client-authn-node";
 import {memberToString} from "./util/Conversion";
-import {CurationConfig, Curator} from "./index";
+import {CurationConfig, Curator} from "../index";
 
 const credentials ={
   "refreshToken": "vpMxN5be1bJuO4cU9bpeaGT8J6VuOSgx",
@@ -74,7 +74,7 @@ async function run(){
   console.log('syncing done');
   // await extractMember(curator);
   // await extractMembers(curator);
-  // await acceptNewestMember(curator); // TODO test again?
+  // await acceptNewestMember(curator); // TODO tests again?
   // await rejectNewestMember(curator);
   // process.exit();
 
