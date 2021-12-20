@@ -1,4 +1,4 @@
-import { rmdirSync} from 'fs';
+import {rmdirSync} from 'fs';
 import * as Path from 'path';
 
 module.exports = async (): Promise<void> => {

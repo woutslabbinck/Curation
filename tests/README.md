@@ -1,7 +1,7 @@
 # Testing
 
-To test the functionality this library, the port that the solid community server uses has to be extended to the environment file
-The `.env` file then becomes.
+To test the functionality this library, the port that the solid community server uses has to be extended to the
+environment file The `.env` file then becomes.
 
 ```text
 SOLID_IDP=https://broker.pod.inrupt.com

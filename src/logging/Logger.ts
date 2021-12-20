@@ -14,7 +14,7 @@ export class Logger {
 
   constructor(loggable: Instance | string) {
     const label = typeof loggable === 'string' ? loggable : loggable.constructor.name;
-    const level: LogLevel = process.env.LOGGER_LEVEL && isLogLevel(process.env.LOGGER_LEVEL)? process.env.LOGGER_LEVEL : 'info';
+    const level: LogLevel = process.env.LOGGER_LEVEL && isLogLevel(process.env.LOGGER_LEVEL) ? process.env.LOGGER_LEVEL : 'info';
 
     this.logger = createLogger({
       level: level,

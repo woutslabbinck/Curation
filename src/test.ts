@@ -5,16 +5,15 @@
  * Created on 15/12/2021
  *****************************************/
 import {Session} from "@inrupt/solid-client-authn-node";
-import {memberToString} from "./util/Conversion";
 import {CurationConfig, Curator} from "../index";
+import {memberToString} from "./util/Conversion";
 
-const credentials ={
+const credentials = {
   "refreshToken": "vpMxN5be1bJuO4cU9bpeaGT8J6VuOSgx",
   "clientId": "JAhsucWnAdMIdl2c5fDPMcm0kHp5iVfF",
   "clientSecret": "9QjgocuLAAWWK4lWHy9uxI89JBh2SxaT",
   "issuer": "https://broker.pod.inrupt.com/",
 };
-
 
 
 const rootIRI = 'https://tree.linkeddatafragments.org/announcements/';
@@ -26,16 +25,17 @@ const config: CurationConfig = {
   synchronizedIRI: synchronizedIRI
 };
 
-async function synchronise(curator:Curator) {
+async function synchronise(curator: Curator) {
   await curator.synchronize();
 }
 
-async function extractMember(curator:Curator) {
+async function extractMember(curator: Curator) {
   const url = 'https://tree.linkeddatafragments.org/announcements/1639573889285/6eda2dfd-13e2-4d75-8edb-312e17c6f00f';
   const member = await curator.extractMember(url);
   console.log(await memberToString(member.value, member.iri));
 }
-async function extractMembers(curator:Curator) {
+
+async function extractMembers(curator: Curator) {
   const members = await curator.getRecentMembers(100);
   console.log(`amount of members in syncedCollection: ${members.length}`);
   if (members.length) {
@@ -44,19 +44,21 @@ async function extractMembers(curator:Curator) {
     console.log(await memberToString(member.value, member.iri));
   }
 }
-async function acceptNewestMember(curator:Curator) {
+
+async function acceptNewestMember(curator: Curator) {
   await curator.init();
   const members = await curator.getRecentMembers(1);
   const member = await curator.extractMember(members[0].memberIRI);
 
-  await curator.accept(members[0].memberIRI,member.value,  members[0].timestamp );
+  await curator.accept(members[0].memberIRI, member.value, members[0].timestamp);
 }
 
-async function rejectNewestMember(curator:Curator) {
+async function rejectNewestMember(curator: Curator) {
   const members = await curator.getRecentMembers(1);
-  await curator.reject(members[0].memberIRI, members[0].timestamp );
+  await curator.reject(members[0].memberIRI, members[0].timestamp);
 }
-async function run(){
+
+async function run() {
   const session = new Session();
   // session.onNewRefreshToken((newToken: string): void => {
   //   console.log("New refresh token: ", newToken);

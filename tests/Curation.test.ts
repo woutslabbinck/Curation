@@ -8,8 +8,9 @@ import {ACLConfig, getSession, LDESConfig, LDESinSolid, Orchestrator} from "@tre
 import {Store} from "n3";
 import {Curator} from "../src/Curator";
 import {fileAsStore, turtleStringToStore} from "../src/util/Conversion";
-import { DCT, RDF, TREE} from "../src/util/Vocabularies";
+import {DCT, RDF, TREE} from "../src/util/Vocabularies";
 import {solidUrl, sleep} from "./solidHelper";
+
 describe('Integration test for LDESinSolid and Orchestrating functionalities', () => {
   const base: string = solidUrl();
   let session: Session;

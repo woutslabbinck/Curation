@@ -1,6 +1,6 @@
 // Creating vocabularies is copied from https://github.com/solid/community-server/blob/b42150cf52212ff2d6ba76e0db78faf71b10db89/src/util/Vocabularies.ts
-import { namedNode } from '@rdfjs/data-model';
-import { NamedNode } from 'rdf-js';
+import {namedNode} from '@rdfjs/data-model';
+import {NamedNode} from 'rdf-js';
 
 type RecordOf<TKey extends any[], TValue> = Record<TKey[number], TValue>;
 
@@ -16,7 +16,7 @@ export function createNamespace<TKey extends string, TValue>(
   toValue: (expanded: string) => TValue,
   ...localNames: TKey[]
 ):
-  Namespace<typeof localNames, TValue> {
+    Namespace<typeof localNames, TValue> {
   const expanded: Namespace<typeof localNames, TValue> = {} as any;
   // Expose the main namespace
   expanded.namespace = toValue(baseUri);
@@ -32,7 +32,7 @@ export function createNamespace<TKey extends string, TValue>(
  * and exports the given local names as properties on the returned object.
  */
 export function createUriNamespace<T extends string>(baseUri: string, ...localNames: T[]):
-Namespace<typeof localNames, string> {
+    Namespace<typeof localNames, string> {
   return createNamespace(baseUri, (expanded): string => expanded, ...localNames);
 }
 
@@ -41,7 +41,7 @@ Namespace<typeof localNames, string> {
  * and exports the given local names as properties on the returned object.
  */
 export function createTermNamespace<T extends string>(baseUri: string, ...localNames: T[]):
-Namespace<typeof localNames, NamedNode> {
+    Namespace<typeof localNames, NamedNode> {
   return createNamespace(baseUri, namedNode, ...localNames);
 }
 
@@ -51,9 +51,9 @@ Namespace<typeof localNames, NamedNode> {
  * Under the `terms` property, it exposes the expanded local names as named nodes.
  */
 export function createUriAndTermNamespace<T extends string>(baseUri: string, ...localNames: T[]):
-Namespace<typeof localNames, string> & { terms: Namespace<typeof localNames, NamedNode> } {
+    Namespace<typeof localNames, string> & { terms: Namespace<typeof localNames, NamedNode> } {
   return Object.assign(createUriNamespace(baseUri, ...localNames),
-    { terms: createTermNamespace(baseUri, ...localNames) });
+    {terms: createTermNamespace(baseUri, ...localNames)});
 }
 
 export const AS = createUriAndTermNamespace('https://www.w3.org/ns/activitystreams#',
