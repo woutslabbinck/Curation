@@ -4,7 +4,7 @@
  * Author: Wout Slabbinck (wout.slabbinck@ugent.be)
  * Created on 03/12/2021
  *****************************************/
-import {Session} from "@inrupt/solid-client-authn-node";
+import {Session} from "@rubensworks/solid-client-authn-isomorphic";
 import {EventStream, LDESClient, newEngine} from '@treecg/actor-init-ldes-client';
 import {extractAnnouncementsMetadata} from "@treecg/ldes-announcements";
 import {DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/Interfaces";

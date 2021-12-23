@@ -1,10 +1,11 @@
 import {readdirSync, rmdirSync} from "fs";
 import Path from "path";
-import {Session} from "@inrupt/solid-client-authn-node";
+import {Session} from "@rubensworks/solid-client-authn-isomorphic";
 import {createViewAnnouncement, postAnnouncement} from "@treecg/ldes-announcements";
 import {AnnouncementConfig} from "@treecg/ldes-announcements/dist/lib/Writer";
 import {Announce} from "@treecg/ldes-announcements/dist/util/Interfaces";
-import {ACLConfig, getSession, LDESConfig, LDESinSolid, Orchestrator} from "@treecg/ldes-orchestrator";
+import {ACLConfig, LDESConfig, LDESinSolid, Orchestrator} from "@treecg/ldes-orchestrator";
+import {getSession} from "@treecg/ldes-orchestrator/dist/src/Login";
 import {Store} from "n3";
 import {Curator} from "../src/Curator";
 import {fileAsStore, turtleStringToStore} from "../src/util/Conversion";
@@ -226,8 +227,9 @@ describe('Integration test for LDESinSolid and Orchestrating functionalities', (
       const response = await postAnnouncement(announcement, ldesBaseUrl);
       await curator.synchronize();
 
-      await curator.reject(response.headers.get('location'));
-      await curator.reject(response.headers.get('location'));
+
+      await curator.reject(response.headers.get('location')!);
+      await curator.reject(response.headers.get('location')!);
 
       const membersLeft = await curator.getRecentMembers(1);
       expect(membersLeft.length).toBe(0);
@@ -273,7 +275,7 @@ describe('Integration test for LDESinSolid and Orchestrating functionalities', (
       await curator.init();
 
       const memberIri = response.headers.get('location');
-      await curator.accept(memberIri);
+      await curator.accept(memberIri!);
       // very ugly code to get the file where the member is added -> todo: Get it via a nice way
 
       const curatedLdesPath = Path.join(solidPodPath, curationDirectory, curatedName);

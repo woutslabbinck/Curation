@@ -4,11 +4,10 @@
  * Author: Wout Slabbinck (wout.slabbinck@ugent.be)
  * Created on 10/12/2021
  *****************************************/
-import {Session} from "@inrupt/solid-client-authn-node";
-import {DataFactory, Quad, Store, Writer} from "n3";
+import {Session} from "@rubensworks/solid-client-authn-isomorphic";
+import { Quad, Store, Writer} from "n3";
 import {Logger} from "../logging/Logger";
 import {turtleStringToStore} from "./Conversion";
-import quad = DataFactory.quad;
 
 const logger = new Logger('SolidCommunication');
 

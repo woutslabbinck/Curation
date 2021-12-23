@@ -1,4 +1,4 @@
-import {isLoggedin, login} from "@treecg/ldes-orchestrator";
+import {isLoggedin, login} from "@treecg/ldes-orchestrator/dist/src/Login";
 import {isRunning, runSolid} from "./solidHelper";
 
 

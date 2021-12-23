@@ -15,9 +15,8 @@ e.g. [announcement LDES](https://tree.linkeddatafragments.org/announcements/)).
   a  **[Session](https://docs.inrupt.com/developer-tools/api/javascript/solid-client-authn-browser/classes/Session.html)**
   and log in
 
-  [^fn1]: Currently, the object of an announcement can only by a DCAT Dataset Application Profile, DCAT DataService
-  Application profile or a description of an LDES view. Those interfaces are defined in
-  the [LDES-Announcements](https://github.com/TREEcg/LDES-Announcements/blob/main/src/util/Interfaces.ts) package.
+  [^fn1]: Currently, the object of an announcement can only by a DCAT Dataset Application Profile, DCAT DataService Application profile or a description of an LDES view. Those interfaces are defined in
+the [LDES-Announcements](https://github.com/TREEcg/LDES-Announcements/blob/main/src/util/Interfaces.ts) package.
   [^fn2]: When the LDP is a Solid pod, you need a ACL:Write grant for the WebID you are using.
 
 ## Flow to curate the contents of an announcement
@@ -27,22 +26,26 @@ e.g. [announcement LDES](https://tree.linkeddatafragments.org/announcements/)).
 Log in with your webID to retrieve credentials[^fn3]. With those credentials, create a Session and log in. Now an object
 of the class **Curator** can be created.
 
+In order for logging in to work, an environment file (`.env`) is required that contains the Identy provider used for your WebID.
+
+```text
+SOLID_IDP=https://broker.pod.inrupt.com
+```
+
+
+
 Adding or rejecting the contents of an announcement to a curated EventStream is done with an object of the Curator
 class.
 
 [^fn3]: In the package LDES-Ochestrator, there is script which can generate such credentials.
 
 ```typescript
-const session = new Session();
-session.onNewRefreshToken((newToken) => {
-  console.log("New refresh token: ", newToken);
-});
-await session.login({
-  clientId: credentials.clientId,
-  clientSecret: credentials.clientSecret,
-  refreshToken: credentials.refreshToken,
-  oidcIssuer: credentials.issuer,
-});
+const { login, isLoggedin, getSession } = require('@treecg/ldes-orchestrator');
+const { Curator } = require('@treecg/curation');
+
+login();
+await isLoggedin(); // code that checks whether you are already logged in
+const session = await getSession();
 
 const announcementIRI = 'https://tree.linkeddatafragments.org/announcements/';
 const curatedIRI = 'https://tree.linkeddatafragments.org/datasets/curated/';
@@ -61,10 +64,8 @@ const curator = new Curator(config, session);
 
 The first thing that has to be created using the Curator object is to synchronize with the announcement-LDES.
 
-Synchronizing fetches all the ids of the members within the announcement LDES and stores them in a collection (the **
-Synchronized Collection**). This Synchronized collection contains the state of the curation process. It consists of all
-members of the LDES announcements minus the announcements that we don't care about or were accepted to the Curated LDES
-already.
+Synchronizing fetches all the ids of the members within the announcement LDES and stores them in a collection (the **Synchronized Collection**). This Synchronized collection contains the state of the curation process. It consists of all
+members of the LDES announcements minus the announcements that we don't care about or were accepted to the Curated LDES already.
 
 ```typescript
 // synchronizing with announcement LDES
