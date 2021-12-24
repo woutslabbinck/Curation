@@ -5,7 +5,6 @@
  * Created on 03/12/2021
  *****************************************/
 import {Session} from "@rubensworks/solid-client-authn-isomorphic";
-import {EventStream, LDESClient, newEngine} from '@treecg/actor-init-ldes-client';
 import {extractAnnouncementsMetadata} from "@treecg/ldes-announcements";
 import {DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/Interfaces";
 import {ACLConfig, LDESConfig, LDESinSolid, AccessSubject} from "@treecg/ldes-orchestrator";
@@ -40,15 +39,14 @@ export class Curator {
   private curatedIRI: string;
   private synchronizedIRI: string;
   private curatedLDESinSolid: LDESinSolid | undefined;
+
   // this field allows waiting for the synchronization process.
-  private synchronizationCompleted: boolean;
 
   constructor(config: CurationConfig, session: Session) {
     this.curatedIRI = config.curatedIRI;
     this.ldesIRI = config.ldesIRI;
     this.synchronizedIRI = config.synchronizedIRI;
     this.session = session;
-    this.synchronizationCompleted = false;
   }
 
   /**
@@ -214,8 +212,6 @@ export class Curator {
     const LDESRootCollectionIRI = `${LDESRootNode}#Collection`;
     const syncedRootNode = `${this.synchronizedIRI}root.ttl`;
 
-    this.synchronizationCompleted = false;
-
     const response = await this.session.fetch(syncedRootNode);
 
     const contentType = response.headers.get('content-type');
@@ -224,21 +220,15 @@ export class Curator {
     }
 
     if (response.status === 200) {
-      // It exists already
+      // Synced collection exists already
       const body = await response.text();
       const store = await stringToStore(body, {contentType});
-      await this.otherSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI, store);
+      await this.otherTimesSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI, store);
     } else {
       // create container
       await putContainer(this.synchronizedIRI, this.session);
 
       await this.firstTimeSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI);
-    }
-
-    // wait till it has synced -> maybe this should go in the individual sync methods?
-    while (!this.synchronizationCompleted) {
-      const sleep = (ms: number): Promise<any> => new Promise(resolve => setTimeout(resolve, ms));
-      await sleep(1000);
     }
   }
 
@@ -351,7 +341,6 @@ export class Curator {
     for (const relationNodeId of relationNodeIds) {
       await this.synchronizeMembersFromRelation(relationNodeId, LDESRootCollectionIRI);
     }
-    this.synchronizationCompleted = true; // todo remove later
   }
 
   /**
@@ -362,7 +351,7 @@ export class Curator {
      * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
      * @param syncedStore The store of the synced root node
      */
-  private async otherSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string, syncedStore: Store): Promise<void> {
+  private async otherTimesSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string, syncedStore: Store): Promise<void> {
     const syncQuads = syncedStore.getQuads(syncedRootNode, DCT.issued, null, null);
     if (syncQuads.length !== 1) {
       throw Error(`Can't find last time synced at ${syncedRootNode}.`);
@@ -370,12 +359,88 @@ export class Curator {
     const lastSynced = this.extractTimeFromLiteral(syncQuads[0].object as Literal);
     const nowQuad = new Quad(namedNode(syncedRootNode), namedNode(DCT.issued), this.timestampToLiteral(Date.now()));
 
-    const newRelations: string[] = [];
-    const syncedMostRecentRelation = this.calculateMostRecentRelation(syncedStore);
 
+    // update root node and retrieve new relations
+    const newRelations = await this.updateRootNode(LDESRootNode, syncedStore, syncedRootNode);
+
+    // synchronize members of new relations
+    for (const relation of newRelations) {
+      const iri = this.syncedRelationtoLDESRelationIRI(relation);
+      await this.synchronizeMembersFromRelation(iri, LDESRootCollectionIRI);
+    }
+
+    await this.updateCurrentMostRecentRelation(syncedStore, lastSynced, LDESRootCollectionIRI);
+
+    // update DCTERMS issued time of the synced collection.
+    // This way next time the synced collection can be updated properly
+    try {
+      await patchQuads(syncedRootNode, this.session, [nowQuad], SPARQL.INSERT);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not add new DCTERMS issued at ${syncedRootNode}`);
+    }
+    try {
+      await patchQuads(syncedRootNode, this.session, [syncQuads[0]], SPARQL.DELETE);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not delete old DCTERMS issued at ${syncedRootNode}`);
+    }
+
+    this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
+  }
+
+  private async updateCurrentMostRecentRelation(syncedStore: Store, lastSynced: number, LDESRootCollectionIRI: string): Promise<void> {
+    const syncedMostRecentRelation = this.calculateMostRecentRelation(syncedStore);
+    const mostRecentRelation = this.syncedRelationtoLDESRelationIRI(syncedMostRecentRelation);
+
+    const store = await fetchResourceAsStore(mostRecentRelation, this.session);
+    const potentialMembers = store.getObjects(null, LDP.contains, null).map(object => object.id);
+    const members: string[] = [];
+    potentialMembers.forEach(memberID => {
+      const memberTimeLiteral = store.getQuads(memberID, DCT.modified, null, null)[0].object;
+      const memberDateTime = this.extractTimeFromLiteral(memberTimeLiteral as Literal);
+      if (memberDateTime > lastSynced) {
+        members.push(memberID);
+      }
+
+    });
+    const collection = new Store();
+    collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(RDF.type), namedNode(TREE.Collection));
+    members.forEach((member: string) => {
+      const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
+      if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${member}`);
+
+      collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(member));
+      collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
+    });
+
+    // iri where the part of the collection should be stored
+    const collectionIRI = this.ldesRelationToSyncedRelationIRI(mostRecentRelation);
+    try {
+      await patchQuads(collectionIRI, this.session,
+        collection.getQuads(null, null, null, null), SPARQL.INSERT);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not update part of collection at ${collectionIRI}`);
+    }
+    this.logger.info(`${collectionIRI} was updated with ${collection.getQuads(null, TREE.member, null, null).length} members.`);
+  }
+
+  /**
+     * Updates the synced root node with the new relations since last sync time.
+     * Also returns the new relation nodes which members should be added to the synced collection as well.
+     *
+     * @param LDESRootNode
+     * @param syncedStore
+     * @param syncedRootNode
+     * @returns {Promise<string[]>}
+     */
+  private async updateRootNode(LDESRootNode: string, syncedStore: Store, syncedRootNode: string): Promise<string[]> {
     const LDESRootStore = await fetchResourceAsStore(LDESRootNode, this.session);
     const metadata = await extractMetadata(LDESRootStore.getQuads(null, null, null, null));
+
     const newRelationsStore = new Store();
+    const newRelations: string[] = [];
 
     const metadataRelations = metadata.nodes.get(LDESRootNode).relation;
     metadataRelations.forEach((relationIRI: URI) => {
@@ -415,60 +480,7 @@ export class Curator {
       this.logger.error(`Could not patch root at ${syncedRootNode}`);
     }
     this.logger.info(`Root patched with new relations at ${syncedRootNode}`);
-
-    for (const relation of newRelations) {
-      const iri = this.syncedRelationtoLDESRelationIRI(relation);
-      await this.synchronizeMembersFromRelation(iri, LDESRootCollectionIRI);
-    }
-
-    const mostRecentRelation = this.syncedRelationtoLDESRelationIRI(syncedMostRecentRelation);
-    const store = await fetchResourceAsStore(mostRecentRelation, this.session);
-    const potentialMembers = store.getObjects(null, LDP.contains, null).map(object => object.id);
-    const members: string[] = [];
-    potentialMembers.forEach(memberID => {
-      const memberTimeLiteral = store.getQuads(memberID, DCT.modified, null, null)[0].object;
-      const memberDateTime = this.extractTimeFromLiteral(memberTimeLiteral as Literal);
-      if (memberDateTime > lastSynced) {
-        members.push(memberID);
-      }
-
-    });
-    const collection = new Store();
-    collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(RDF.type), namedNode(TREE.Collection));
-    members.forEach((member: string) => {
-      const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
-      if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${member}`);
-
-      collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(member));
-      collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
-    });
-
-    // iri where the part of the collection should be stored
-    const collectionIRI = this.ldesRelationToSyncedRelationIRI(mostRecentRelation);
-    try {
-      await patchQuads(collectionIRI, this.session,
-        collection.getQuads(null, null, null, null), SPARQL.INSERT);
-    } catch (error) {
-      console.log(error);
-      this.logger.error(`Could not update part of collection at ${collectionIRI}`);
-    }
-    this.logger.info(`${collectionIRI} was updated with ${collection.getQuads(null, TREE.member, null, null).length} members.`);
-
-    try {
-      await patchQuads(syncedRootNode, this.session, [nowQuad], SPARQL.INSERT);
-    } catch (error) {
-      console.log(error);
-      this.logger.error(`Could not add new DCTERMS issued at ${syncedRootNode}`);
-    }
-    try {
-      await patchQuads(syncedRootNode, this.session, [syncQuads[0]], SPARQL.DELETE);
-    } catch (error) {
-      console.log(error);
-      this.logger.error(`Could not delete old DCTERMS issued at ${syncedRootNode}`);
-    }
-
-    this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
-    this.synchronizationCompleted = true;
+    return newRelations;
   }
 
   /**
