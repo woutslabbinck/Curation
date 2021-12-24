@@ -155,6 +155,7 @@ describe('Integration test for LDESinSolid and Orchestrating functionalities', (
       // synchronize once
       await curator.synchronize();
 
+      await sleep(1000);
       // add one announcement
       const responseAnnouncement2 = await postAnnouncement(announcement, ldesBaseUrl);
 

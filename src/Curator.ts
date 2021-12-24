@@ -227,12 +227,12 @@ export class Curator {
       // It exists already
       const body = await response.text();
       const store = await stringToStore(body, {contentType});
-      await this.otherTimesSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI, store);
+      await this.otherSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI, store);
     } else {
       // create container
       await putContainer(this.synchronizedIRI, this.session);
 
-      await this.firstSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI);
+      await this.firstTimeSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI);
     }
 
     // wait till it has synced -> maybe this should go in the individual sync methods?
@@ -293,7 +293,7 @@ export class Curator {
      * @param syncedRootNode IRI of the root node of the synced collection
      * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
      */
-  private async firstSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string): Promise<void> {
+  private async firstTimeSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string): Promise<void> {
     const LDESRootStore = await fetchResourceAsStore(LDESRootNode, this.session);
     const metadata = await extractMetadata(LDESRootStore.getQuads(null, null, null, null));
 
@@ -355,82 +355,120 @@ export class Curator {
   }
 
   /**
-     * Flow for the first time an LDES in LDP has to be synchronized
+     * Flow for the subsequent times an LDES in LDP has to be synchronized
      *
      * @param LDESRootNode IRI of the LDES in LDP root node
      * @param syncedRootNode IRI of the root node of the synced collection
      * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
+     * @param syncedStore The store of the synced root node
      */
-  private async firstTimeSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string): Promise<void> {
-    const options = {
-      "pollingInterval": 5000, // millis
-      "representation": "Quads", //Object or Quads
-      "emitMemberOnce": true,
-      "disableSynchronization": true
-    };
-    const LDESClient: LDESClient = newEngine();
-    const eventstreamSync: EventStream = LDESClient.createReadStream(LDESRootNode, options);
-    eventstreamSync.on('data', (member) => {
-      console.log(member);
-    });
-    eventstreamSync.on('metadata', async ({treeMetadata, url}) => {
-      // console.log(treeMetadata);
-      // is it a root?
-      if (url === LDESRootNode) {
-        // First time
-        const metadataRelations = treeMetadata.nodes.get(url).relation;
+  private async otherSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string, syncedStore: Store): Promise<void> {
+    const syncQuads = syncedStore.getQuads(syncedRootNode, DCT.issued, null, null);
+    if (syncQuads.length !== 1) {
+      throw Error(`Can't find last time synced at ${syncedRootNode}.`);
+    }
+    const lastSynced = this.extractTimeFromLiteral(syncQuads[0].object as Literal);
+    const nowQuad = new Quad(namedNode(syncedRootNode), namedNode(DCT.issued), this.timestampToLiteral(Date.now()));
 
-        // create new root body
-        const collection: Collection = {
-          "@context": {"@vocab": TREE.namespace},
-          "@id": `${syncedRootNode}#Collection`,
-          "@type": [TREE.Collection],
-          view: [{"@id": syncedRootNode}]
-        };
-        const view: Node = {
-          "@context": {"@vocab": TREE.namespace},
-          "@id": syncedRootNode,
-          "@type": [TREE.Node],
-          relation: []
-        };
-        const now = new Date();
-        view[DCT.issued] = {'@value': now.toISOString(), '@type': XSD.dateTime};
+    const newRelations: string[] = [];
+    const syncedMostRecentRelation = this.calculateMostRecentRelation(syncedStore);
 
-        const relations: Relation[] = [];
-        metadataRelations.forEach((relationIRI: URI) => {
-          // clone the relation -> I don't want to update it
-          const relation: Relation = {...treeMetadata.relations.get(relationIRI['@id'])};
-          // In practice this if holds always
-          if (relation.node && relation.node[0]) {
-            // change relation of node -> again clone it otherwise the original node is changed
-            relation.node = [...relation.node];
-            relation.node[0] = {
-              "@id": this.ldesRelationToSyncedRelationIRI(relation.node[0]['@id'])
-            }
-            ;
-          }
-          view.relation?.push(relationIRI); // I just defined it, believe me it's there
-          relations.push(relation);
-        });
+    const LDESRootStore = await fetchResourceAsStore(LDESRootNode, this.session);
+    const metadata = await extractMetadata(LDESRootStore.getQuads(null, null, null, null));
+    const newRelationsStore = new Store();
 
-        const body = [collection, view, ...relations];
-
-        const bodyStore = await ldjsonToStore(JSON.stringify(body));
-        const turtleBody = storeToString(bodyStore);
-        // place root to syncedURI
-        putTurtle(syncedRootNode, this.session, turtleBody).catch(error => {
-          console.log(error);
-          this.logger.error(`Could not create root at ${syncedRootNode}`);
-        });
-
-      } else {
-        this.synchronizeMembersFromRelation(url, LDESRootCollectionIRI);
+    const metadataRelations = metadata.nodes.get(LDESRootNode).relation;
+    metadataRelations.forEach((relationIRI: URI) => {
+      const relation: Relation = metadata.relations.get(relationIRI["@id"]);
+      // They should exist, but still a check?
+      if (!(relation.node && relation.node[0] && relation.path && relation.path[0]
+                && relation.value && relation.value[0] && relation["@type"] && relation["@type"][0])) {
+        throw Error('relation parts are not in this relation');
       }
+      let node: Node = {...relation.node[0]};
+      node = {
+        "@id": this.ldesRelationToSyncedRelationIRI(node['@id'])
+      }
+      ;
+      const exists = syncedStore.getQuads(null, TREE.node, node["@id"], null).length === 1;
+
+      // only if it doesn't exist yet, should the root be patched
+      if (!exists) {
+        const relationNode = newRelationsStore.createBlankNode();
+        newRelationsStore.addQuad(namedNode(syncedRootNode), namedNode(TREE.relation), relationNode);
+
+        newRelationsStore.addQuad(relationNode, namedNode(RDF.type), namedNode(relation["@type"][0]));
+        newRelationsStore.addQuad(relationNode, namedNode(TREE.node), namedNode(node["@id"]));
+        newRelationsStore.addQuad(relationNode, namedNode(TREE.path), namedNode(relation.path[0]["@id"]));
+        const dateTime = new Date(relation.value[0]['@value']);
+        newRelationsStore.addQuad(relationNode, namedNode(TREE.value), this.timestampToLiteral(dateTime.getTime()));
+
+        newRelations.push(node["@id"]);
+      }
+
     });
-    eventstreamSync.on('end', () => {
-      this.logger.info("LDESClient finds no more data");
-      this.synchronizationCompleted = true;
+    try {
+      await patchQuads(syncedRootNode, this.session,
+        newRelationsStore.getQuads(null, null, null, null), SPARQL.INSERT);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not patch root at ${syncedRootNode}`);
+    }
+    this.logger.info(`Root patched with new relations at ${syncedRootNode}`);
+
+    for (const relation of newRelations) {
+      const iri = this.syncedRelationtoLDESRelationIRI(relation);
+      await this.synchronizeMembersFromRelation(iri, LDESRootCollectionIRI);
+    }
+
+    const mostRecentRelation = this.syncedRelationtoLDESRelationIRI(syncedMostRecentRelation);
+    const store = await fetchResourceAsStore(mostRecentRelation, this.session);
+    const potentialMembers = store.getObjects(null, LDP.contains, null).map(object => object.id);
+    const members: string[] = [];
+    potentialMembers.forEach(memberID => {
+      const memberTimeLiteral = store.getQuads(memberID, DCT.modified, null, null)[0].object;
+      const memberDateTime = this.extractTimeFromLiteral(memberTimeLiteral as Literal);
+      if (memberDateTime > lastSynced) {
+        members.push(memberID);
+      }
+
     });
+    const collection = new Store();
+    collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(RDF.type), namedNode(TREE.Collection));
+    members.forEach((member: string) => {
+      const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
+      if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${member}`);
+
+      collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(member));
+      collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
+    });
+
+    // iri where the part of the collection should be stored
+    const collectionIRI = this.ldesRelationToSyncedRelationIRI(mostRecentRelation);
+    try {
+      await patchQuads(collectionIRI, this.session,
+        collection.getQuads(null, null, null, null), SPARQL.INSERT);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not update part of collection at ${collectionIRI}`);
+    }
+    this.logger.info(`${collectionIRI} was updated with ${collection.getQuads(null, TREE.member, null, null).length} members.`);
+
+    try {
+      await patchQuads(syncedRootNode, this.session, [nowQuad], SPARQL.INSERT);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not add new DCTERMS issued at ${syncedRootNode}`);
+    }
+    try {
+      await patchQuads(syncedRootNode, this.session, [syncQuads[0]], SPARQL.DELETE);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not delete old DCTERMS issued at ${syncedRootNode}`);
+    }
+
+    this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
+    this.synchronizationCompleted = true;
   }
 
   /**
@@ -506,136 +544,6 @@ export class Curator {
     return collection;
   }
 
-  /**
-     * Flow for the subsequent times an LDES in LDP has to be synchronized
-     *
-     * @param LDESRootNode IRI of the LDES in LDP root node
-     * @param syncedRootNode IRI of the root node of the synced collection
-     * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
-     * @param syncedStore The store of the synced root node
-     */
-  private async otherTimesSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string, syncedStore: Store): Promise<void> {
-    const syncQuads = syncedStore.getQuads(syncedRootNode, DCT.issued, null, null);
-    if (syncQuads.length !== 1) {
-      throw Error(`Can't find last time synced at ${syncedRootNode}.`);
-    }
-    const lastSynced = this.extractTimeFromLiteral(syncQuads[0].object as Literal);
-    const nowQuad = new Quad(namedNode(syncedRootNode), namedNode(DCT.issued), this.timestampToLiteral(Date.now()));
-
-    const newRelations: string[] = [];
-    const syncedMostRecentRelation = this.calculateMostRecentRelation(syncedStore);
-    const options = {
-      "pollingInterval": 5000, // millis
-      "representation": "Quads", //Object or Quads
-      "emitMemberOnce": true,
-      "disableSynchronization": true
-    };
-    const LDESClient: LDESClient = newEngine();
-    const eventstreamSync: EventStream = LDESClient.createReadStream(LDESRootNode, options);
-
-    eventstreamSync.on('data', (member) => {
-      console.log(member);
-    });
-    eventstreamSync.on('metadata', ({treeMetadata, url}) => {
-      const syncTranslation = this.ldesRelationToSyncedRelationIRI(url);
-
-      if (url === LDESRootNode) {
-        const newRelationsStore = new Store();
-        const metadataRelations = treeMetadata.nodes.get(url).relation;
-        metadataRelations.forEach((relationIRI: URI) => {
-          const relation: Relation = treeMetadata.relations.get(relationIRI["@id"]);
-          // They should exist, but still a check?
-          if (!(relation.node && relation.node[0] && relation.path && relation.path[0]
-                        && relation.value && relation.value[0] && relation["@type"] && relation["@type"][0])) {
-            throw Error('relation parts are not in this relation');
-          }
-          let node: Node = {...relation.node[0]};
-          node = {
-            "@id": this.ldesRelationToSyncedRelationIRI(node['@id'])
-          }
-          ;
-          const exists = syncedStore.getQuads(null, TREE.node, node["@id"], null).length === 1;
-
-          // only if it doesn't exist yet, should the root be patched
-          if (!exists) {
-            const relationNode = newRelationsStore.createBlankNode();
-            newRelationsStore.addQuad(namedNode(syncedRootNode), namedNode(TREE.relation), relationNode);
-
-            newRelationsStore.addQuad(relationNode, namedNode(RDF.type), namedNode(relation["@type"][0]));
-            newRelationsStore.addQuad(relationNode, namedNode(TREE.node), namedNode(node["@id"]));
-            newRelationsStore.addQuad(relationNode, namedNode(TREE.path), namedNode(relation.path[0]["@id"]));
-            const dateTime = new Date(relation.value[0]['@value']);
-            newRelationsStore.addQuad(relationNode, namedNode(TREE.value), this.timestampToLiteral(dateTime.getTime()));
-
-            newRelations.push(node["@id"]);
-          }
-
-        });
-
-        patchQuads(syncedRootNode, this.session,
-          newRelationsStore.getQuads(null, null, null, null), SPARQL.INSERT)
-          .catch(error => {
-            console.log(error);
-            this.logger.error(`Could not patch root at ${syncedRootNode}`);
-          });
-        this.logger.info(`Root patched with new relations at ${syncedRootNode}`);
-
-      } else {
-        // if relation is new, do same as first time
-        if (newRelations.includes(syncTranslation)) {
-          this.synchronizeMembersFromRelation(url, LDESRootCollectionIRI);
-        } else if (syncTranslation === syncedMostRecentRelation) {
-          // current url is the most recent relation -> Only add the most recent members
-          fetchResourceAsStore(url, this.session).then(store => {
-            const potentialMembers = store.getObjects(null, LDP.contains, null).map(object => object.id);
-            const members: string[] = [];
-            potentialMembers.forEach(memberID => {
-              const memberTimeLiteral = store.getQuads(memberID, DCT.modified, null, null)[0].object;
-              const memberDateTime = this.extractTimeFromLiteral(memberTimeLiteral as Literal);
-              if (memberDateTime > lastSynced) {
-                members.push(memberID);
-              }
-
-            });
-            const collection = new Store();
-            collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(RDF.type), namedNode(TREE.Collection));
-            members.forEach((member: string) => {
-              const dateTimeLiteral = store.getObjects(member, DCT.modified, null)[0];
-              if (!dateTimeLiteral) throw Error(`Announcement has no dc:modified ${member}`);
-
-              collection.addQuad(namedNode(LDESRootCollectionIRI), namedNode(TREE.member), namedNode(member));
-              collection.addQuad(namedNode(member), namedNode(DCT.modified), dateTimeLiteral); // Also add time to curated IRI
-            });
-
-            // iri where the part of the collection should be stored
-            const collectionIRI = this.ldesRelationToSyncedRelationIRI(url);
-            patchQuads(collectionIRI, this.session,
-              collection.getQuads(null, null, null, null), SPARQL.INSERT).catch(error => {
-              console.log(error);
-              this.logger.error(`Could not update part of collection at ${collectionIRI}`);
-            });
-            this.logger.info(`${collectionIRI} was updated with ${collection.getQuads(null, TREE.member, null, null).length} members.`);
-          });
-        }
-      }
-
-    });
-    eventstreamSync.on('end', () => {
-      this.logger.info("LDESClient finds no more data");
-      patchQuads(syncedRootNode, this.session, [nowQuad], SPARQL.INSERT)
-        .catch(error => {
-          console.log(error);
-          this.logger.error(`Could not add new DCTERMS issued at ${syncedRootNode}`);
-        });
-      patchQuads(syncedRootNode, this.session, [syncQuads[0]], SPARQL.DELETE)
-        .catch(error => {
-          console.log(error);
-          this.logger.error(`Could not delete old DCTERMS issued at ${syncedRootNode}`);
-        });
-      this.logger.info(`Sync time updated in Synced root at ${syncedRootNode}`);
-      this.synchronizationCompleted = true;
-    });
-  }
 
   /**
      * Extract the members of a relation node in the LDES in LDP (where the relation node is an LDP Container)
@@ -720,5 +628,14 @@ export class Curator {
      */
   private ldesRelationToSyncedRelationIRI(iri: string): string {
     return iri.replace(this.ldesIRI, this.synchronizedIRI).slice(0, -1);
+  }
+
+  /**
+     * Transforms a synchronized relation iri to an ldes relation iri
+     * @param iri
+     * @returns {string}
+     */
+  private syncedRelationtoLDESRelationIRI(iri: string): string {
+    return `${iri.replace(this.synchronizedIRI, this.ldesIRI)}/`;
   }
 }
