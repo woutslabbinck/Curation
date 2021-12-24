@@ -8,9 +8,9 @@ import {ACLConfig, LDESConfig, LDESinSolid, Orchestrator} from "@treecg/ldes-orc
 import {getSession} from "@treecg/ldes-orchestrator/dist/src/Login";
 import {Store} from "n3";
 import {Curator} from "../src/Curator";
-import {fileAsStore, turtleStringToStore} from "../src/util/Conversion";
+import {turtleStringToStore} from "../src/util/Conversion";
 import {DCT, RDF, TREE} from "../src/util/Vocabularies";
-import {solidUrl, sleep} from "./solidHelper";
+import {solidUrl, sleep, fileAsStore} from "./solidHelper";
 
 describe('Integration test for LDESinSolid and Orchestrating functionalities', () => {
   const base: string = solidUrl();

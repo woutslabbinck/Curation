@@ -18,6 +18,7 @@
   "author": "woutslabbinck <wout.slabbinck@ugent.be>",
   "license": "ISC",
   "devDependencies": {
+    "@solid/community-server": "^2.0.1",
     "@types/jest": "^27.0.3",
     "@typescript-eslint/eslint-plugin": "^5.4.0",
     "@typescript-eslint/parser": "^5.4.0",
@@ -33,20 +34,20 @@
   },
   "dependencies": {
     "@inrupt/jose-legacy-modules": "^0.0.3-3.17.0",
-    "@rubensworks/solid-client-authn-isomorphic": "^1.0.0",
     "@rdfjs/data-model": "^1.3.4",
-    "@solid/community-server": "^2.0.1",
+    "@rubensworks/solid-client-authn-isomorphic": "^1.0.0",
     "@treecg/actor-init-ldes-client": "^2.5.7",
     "@treecg/ldes-announcements": "^0.0.5",
     "@treecg/ldes-orchestrator": "^0.0.4",
     "@treecg/tree-metadata-extraction": "^1.2.1",
     "dotenv": "^10.0.0",
+    "loglevel": "^1.8.0",
+    "loglevel-plugin-prefix": "^0.8.4",
     "n3": "^1.11.2",
     "rdf-js": "^4.0.2",
     "rdf-parse": "^1.9.1",
     "rdf-store-stream": "^1.3.0",
     "streamify-string": "^1.0.1",
-    "ts-jest": "^27.1.2",
-    "winston": "^3.3.3"
+    "ts-jest": "^27.1.2"
   }
 }

@@ -108,14 +108,15 @@ export class Curator {
         }
       };
       this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
-      await this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent); // note: Currently creates private curated LDES in Solid
+      await this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent); // note: Currently creates private curated LDES in Solid, TODO: make optional by using config
 
       this.logger.info(`Created curated LDES in Solid at ${this.curatedIRI}`);
     }
   }
 
   /**
-     * Accept a member to the curated LDES
+     * Accept a member to the curated LDES.
+     * Also removes the iri from the synced Collection
      * @param memberIRI
      * @returns {Promise<Response>}
      */
@@ -152,6 +153,12 @@ export class Curator {
     }
   }
 
+  /**
+     * Curation action reject: Which means that a member is removed from the synced collection
+     * @param memberIRI
+     * @param timestamp
+     * @returns {Promise<Response>}
+     */
   public async reject(memberIRI: string, timestamp?: number): Promise<Response> {
     if (!timestamp) {
       timestamp = await this.getTimestamp(memberIRI);
@@ -160,6 +167,13 @@ export class Curator {
     return response;
   }
 
+  /**
+     * Fetch the timestamp of an IRI by reading the Last-modified header.
+     * For a member in an LDES, this will be the same as the creation time (as member are immutable
+     * , indicating that they MUST NOT be changed after creation)
+     * @param iri IRI of the LDP Resource
+     * @returns {Promise<number>}
+     */
   private async getTimestamp(iri: string): Promise<number> {
     const response = await this.session.fetch(iri, {
       method: "HEAD"
@@ -171,6 +185,12 @@ export class Curator {
   }
 
 
+  /**
+     * Removes a member from the synced collection stored at the syncedURI
+     * @param memberIRI IRI of the member
+     * @param timestamp timestamp of creation of the member in the LDES in LDP
+     * @returns {Promise<Response>}
+     */
   private async removeFromSyncedCollection(memberIRI: string, timestamp: number): Promise<Response> {
     const syncedLocation = memberIRI.replace(this.ldesIRI, this.synchronizedIRI).split('/').slice(0, -1).join('/'); // NOTE: maybe better to follow the relations? not speed wise but logic wise
     const memberQuad = new Quad(namedNode(`${this.ldesIRI}root.ttl#Collection`), namedNode(TREE.member), namedNode(memberIRI));
@@ -548,11 +568,18 @@ export class Curator {
     });
   }
 
-  private async synchronizeMembersFromRelation(iri: string, LDESRootCollectionIRI: string): Promise<void> {
+  /**
+     * Extract the members of a relation node in the LDES in LDP (where the relation node is an LDP Container)
+     * And Put all those members together with their created time in the synchronized collection
+     * @param iri IRI of an LDP container (which is the relation node)
+     * @param LDESCollectionIRI The IRI of the Event Stream (=Collection) of the LDES in LDP
+     * @returns {Promise<void>}
+     */
+  private async synchronizeMembersFromRelation(iri: string, LDESCollectionIRI: string): Promise<void> {
     // get all member URIs and add them as member to collection, then post them to {syncedURI}/timestamp
 
     const store = await fetchResourceAsStore(iri, this.session);
-    const collection = this.extractMembers(store, iri, LDESRootCollectionIRI);
+    const collection = this.extractMembers(store, iri, LDESCollectionIRI);
     const body = storeToString(collection);
 
     // iri where the part of the collection should be stored
@@ -587,6 +614,11 @@ export class Curator {
     return mostRecentRelation;
   }
 
+  /**
+     * Extract a timestamp (ms) from an RDF Literal
+     * @param dateTimeLiteral
+     * @returns {number}
+     */
   private extractTimeFromLiteral(dateTimeLiteral: Literal): number {
     const value = dateTimeLiteral.value;
     if (!(dateTimeLiteral.datatype && dateTimeLiteral.datatype.id === XSD.dateTime)) {
@@ -596,6 +628,11 @@ export class Curator {
     return dateTime.getTime();
   }
 
+  /**
+     * Convert a timestamp (ms) to an RDF Literal
+     * @param timestamp
+     * @returns {Literal}
+     */
   private timestampToLiteral(timestamp: number): Literal {
     const dateTime = new Date(timestamp);
     return literal(dateTime.toISOString(), namedNode(XSD.dateTime));

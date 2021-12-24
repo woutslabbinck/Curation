@@ -1,6 +1,9 @@
+import {readFileSync} from "fs";
 import Path from "path";
 import {AppRunner} from "@solid/community-server";
 import {config} from "dotenv";
+import {Store} from "n3";
+import {stringToStore} from "../src/util/Conversion";
 
 /***************************************
  * Title: solidHelper.ts
@@ -24,12 +27,12 @@ export async function runSolid(): Promise<void> {
   await new AppRunner().run(
     {
       mainModulePath: `${__dirname}/`,
-      logLevel: 'info',
+      logLevel: 'error',
     },
     Path.join(__dirname, 'file-no-setup.json'),
     {
       rootFilePath: Path.join(__dirname, 'solidPod/'),
-      loggingLevel: 'info',
+      loggingLevel: 'error',
       port: port,
       showStackTrace: false
     }
@@ -60,4 +63,16 @@ export async function isRunning(): Promise<void> {
 
 export function sleep(ms: number): Promise<any> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Convert a file as a store (given a path). Default will use text/turtle as content type
+ * @param path
+ * @param contentType
+ * @returns {Promise<Store>}
+ */
+export async function fileAsStore(path: string, contentType?: string): Promise<Store> {
+  contentType = contentType ? contentType : 'text/turtle';
+  const text = readFileSync(Path.join(path), "utf8");
+  return await stringToStore(text, {contentType});
 }
