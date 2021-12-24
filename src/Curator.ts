@@ -232,7 +232,7 @@ export class Curator {
       // create container
       await putContainer(this.synchronizedIRI, this.session);
 
-      await this.firstTimeSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI);
+      await this.firstSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI);
     }
 
     // wait till it has synced -> maybe this should go in the individual sync methods?
@@ -284,6 +284,74 @@ export class Curator {
       return {type: DCAT.DataService, value: content, iri: announcementIRI};
     }
     throw Error(`Could not extract member from ${announcementIRI}`);
+  }
+
+  /**
+     * Flow for the first time an LDES in LDP has to be synchronized
+     *
+     * @param LDESRootNode IRI of the LDES in LDP root node
+     * @param syncedRootNode IRI of the root node of the synced collection
+     * @param LDESRootCollectionIRI IRI of the LDES in LDP collection
+     */
+  private async firstSync(LDESRootNode: string, syncedRootNode: string, LDESRootCollectionIRI: string): Promise<void> {
+    const LDESRootStore = await fetchResourceAsStore(LDESRootNode, this.session);
+    const metadata = await extractMetadata(LDESRootStore.getQuads(null, null, null, null));
+
+    const metadataRelations = metadata.nodes.get(LDESRootNode).relation;
+    // create new root body
+    const collection: Collection = {
+      "@context": {"@vocab": TREE.namespace},
+      "@id": `${syncedRootNode}#Collection`,
+      "@type": [TREE.Collection],
+      view: [{"@id": syncedRootNode}]
+    };
+    const view: Node = {
+      "@context": {"@vocab": TREE.namespace},
+      "@id": syncedRootNode,
+      "@type": [TREE.Node],
+      relation: []
+    };
+    const now = new Date();
+    view[DCT.issued] = {'@value': now.toISOString(), '@type': XSD.dateTime};
+    const relations: Relation[] = [];
+    metadataRelations.forEach((relationIRI: URI) => {
+      // clone the relation -> I don't want to update it
+      const relation: Relation = {...metadata.relations.get(relationIRI['@id'])};
+      // In practice this if holds always
+      if (relation.node && relation.node[0]) {
+        // change relation of node -> again clone it otherwise the original node is changed
+        relation.node = [...relation.node];
+        relation.node[0] = {
+          "@id": this.ldesRelationToSyncedRelationIRI(relation.node[0]['@id'])
+        }
+        ;
+      }
+      view.relation?.push(relationIRI); // I just defined it, believe me it's there
+      relations.push(relation);
+    });
+    const body = [collection, view, ...relations];
+
+    const bodyStore = await ldjsonToStore(JSON.stringify(body));
+    const turtleBody = storeToString(bodyStore);
+    // place root to syncedURI
+    try {
+      await putTurtle(syncedRootNode, this.session, turtleBody);
+    } catch (error) {
+      console.log(error);
+      this.logger.error(`Could not create root at ${syncedRootNode}`);
+    }
+
+    // NOTE: could create this list within metadataRelations.forEAch
+    const relationNodeIds: string[] = [];
+    LDESRootStore.getObjects(LDESRootNode, TREE.relation, null).forEach(object => {
+      const relationNodeId = LDESRootStore.getObjects(object, TREE.node, null)[0].id;
+      relationNodeIds.push(relationNodeId);
+    });
+
+    for (const relationNodeId of relationNodeIds) {
+      await this.synchronizeMembersFromRelation(relationNodeId, LDESRootCollectionIRI);
+    }
+    this.synchronizationCompleted = true; // todo remove later
   }
 
   /**
@@ -367,6 +435,7 @@ export class Curator {
 
   /**
      * Retrieve the URIs of the most recent members of the synced collection.
+     * This method can be further optimised as currently the whole collection is fetched even though a part is wanted
      * @param amount number of members that are needed
      * @param startPoint Startpoint in the synced collection
      * @returns {Promise<{timestamp: number, memberIRI: string}[]>} sorted list (newest members first)
@@ -584,10 +653,12 @@ export class Curator {
 
     // iri where the part of the collection should be stored
     const collectionIRI = this.ldesRelationToSyncedRelationIRI(iri);
-    putTurtle(collectionIRI, this.session, body).catch(error => {
+    try {
+      await putTurtle(collectionIRI, this.session, body);
+    } catch (error) {
       console.log(error);
       this.logger.error(`Could not update part of collection at ${collectionIRI}`);
-    });
+    }
   }
 
   /**

@@ -5,7 +5,7 @@
  * Created on 10/12/2021
  *****************************************/
 import {Session} from "@rubensworks/solid-client-authn-isomorphic";
-import { Quad, Store, Writer} from "n3";
+import {Quad, Store, Writer} from "n3";
 import {Logger} from "../logging/Logger";
 import {turtleStringToStore} from "./Conversion";
 
