@@ -4,7 +4,7 @@
  * Author: Wout Slabbinck (wout.slabbinck@ugent.be)
  * Created on 15/12/2021
  *****************************************/
-import {Session} from "@inrupt/solid-client-authn-node";
+import {getSession, isLoggedin, login} from "@treecg/ldes-orchestrator/dist/src/Login";
 import {CurationConfig, Curator} from "../index";
 import {memberToString} from "./util/Conversion";
 
@@ -59,7 +59,7 @@ async function rejectNewestMember(curator: Curator) {
 }
 
 async function run() {
-  const session = new Session();
+  // const session = new Session();
   // session.onNewRefreshToken((newToken: string): void => {
   //   console.log("New refresh token: ", newToken);
   // });
@@ -69,11 +69,14 @@ async function run() {
   //   refreshToken: credentials.refreshToken,
   //   oidcIssuer: credentials.issuer,
   // });
+  login();
+  await isLoggedin();
+  const session =await getSession();
   const curator = new Curator(config, session);
   console.log(new Date());
-  // await curator.init();
-  await synchronise(curator);
-  console.log('syncing done');
+  await curator.init(false);
+  // await synchronise(curator);
+  // console.log('syncing done');
   // await extractMember(curator);
   // await extractMembers(curator);
   // await acceptNewestMember(curator); // TODO tests again?

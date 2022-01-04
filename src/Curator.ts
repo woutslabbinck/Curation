@@ -7,7 +7,7 @@
 import {Session} from "@rubensworks/solid-client-authn-isomorphic";
 import {extractAnnouncementsMetadata} from "@treecg/ldes-announcements";
 import {DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/Interfaces";
-import {ACLConfig, LDESConfig, LDESinSolid, AccessSubject} from "@treecg/ldes-orchestrator";
+import {AccessSubject, ACLConfig, LDESConfig, LDESinSolid} from "@treecg/ldes-orchestrator";
 import {extractMetadata} from "@treecg/tree-metadata-extraction";
 import {Collection, Node, Relation, URI} from "@treecg/tree-metadata-extraction/dist/util/Util";
 import {DataFactory, Literal, Quad, Store} from "n3";
@@ -54,9 +54,11 @@ export class Curator {
      * Load the curatedLDES in Solid
      * Creates the curatedLDES in Solid if it does not exist (requires certain access control permissions on the curated IRI)
      * Furthermore verifies that the LDES exists as well.
-     * @returns {Promise<void>}
+     * @param privateCuration When true, the curated LDES in LDP is only visible to the webId from the session. (Default: True)
+     * @return {Promise<void>}
      */
-  public async init(): Promise<void> {
+  public async init(privateCuration?: boolean): Promise<void> {
+    privateCuration = privateCuration ? privateCuration : true;
     if (!this.session.info.isLoggedIn) {
       this.logger.error(`Contents of the session: ${JSON.stringify(this.session.info)}`);
       throw Error("Session is not logged in");
@@ -106,8 +108,12 @@ export class Curator {
         }
       };
       this.curatedLDESinSolid = new LDESinSolid(config.ldesConfig, config.aclConfig, this.session);
-      await this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent); // note: Currently creates private curated LDES in Solid, TODO: make optional by using config
 
+      if (privateCuration) {
+        await this.curatedLDESinSolid.createLDESinLDP(AccessSubject.Agent);
+      } else {
+        await this.curatedLDESinSolid.createLDESinLDP();
+      }
       this.logger.info(`Created curated LDES in Solid at ${this.curatedIRI}`);
     }
   }
@@ -222,7 +228,7 @@ export class Curator {
     if (response.status === 200) {
       // Synced collection exists already
       const body = await response.text();
-      const store = await stringToStore(body, {contentType});
+      const store = await stringToStore(body, {contentType, baseIRI: syncedRootNode});
       await this.otherTimesSync(LDESRootNode, syncedRootNode, LDESRootCollectionIRI, store);
     } else {
       // create container
