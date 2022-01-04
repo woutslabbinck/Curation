@@ -17,7 +17,7 @@ const credentials = {
 
 
 const rootIRI = 'https://tree.linkeddatafragments.org/announcements/';
-const curatedIRI = 'https://tree.linkeddatafragments.org/datasets/curated/';
+const curatedIRI = 'http://localhost:3050/curated/';
 const synchronizedIRI = 'https://tree.linkeddatafragments.org/datasets/synced/';
 const config: CurationConfig = {
   ldesIRI: rootIRI,

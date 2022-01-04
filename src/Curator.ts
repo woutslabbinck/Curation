@@ -58,7 +58,7 @@ export class Curator {
      * @return {Promise<void>}
      */
   public async init(privateCuration?: boolean): Promise<void> {
-    privateCuration = privateCuration ? privateCuration : true;
+    privateCuration = privateCuration !== undefined ? privateCuration : true;
     if (!this.session.info.isLoggedIn) {
       this.logger.error(`Contents of the session: ${JSON.stringify(this.session.info)}`);
       throw Error("Session is not logged in");
