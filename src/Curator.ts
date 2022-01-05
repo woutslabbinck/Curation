@@ -6,7 +6,7 @@
  *****************************************/
 import {Session} from "@rubensworks/solid-client-authn-isomorphic";
 import {extractAnnouncementsMetadata} from "@treecg/ldes-announcements";
-import {DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/Interfaces";
+import {Announce, DataService, DataSet, View} from "@treecg/ldes-announcements/dist/util/Interfaces";
 import {AccessSubject, ACLConfig, LDESConfig, LDESinSolid} from "@treecg/ldes-orchestrator";
 import {extractMetadata} from "@treecg/tree-metadata-extraction";
 import {Collection, Node, Relation, URI} from "@treecg/tree-metadata-extraction/dist/util/Util";
@@ -239,12 +239,12 @@ export class Curator {
   }
 
   /**
-     * Extract the member and its metadata from an LDES in LDP.
-     * Currently, only View, DataSet and DataService can be parsed (interface can be found in LDES-Announcements)
-     * @param announcementIRI
-     * @returns {Promise<{iri: string, type: string, value: View} | {iri: string, type: string, value: DataSet} | {iri: string, type: string, value: DataService}>}
-     */
-  public async extractMember(announcementIRI: string): Promise<{ value: View | DataService | DataSet, type: string, iri: string }> {
+   * Extract the member and its metadata from an LDES in LDP. Also extract the announcement itself
+   * Currently, only View, DataSet and DataService can be parsed (interface can be found in LDES-Announcements)
+   * @param announcementIRI
+   * @returns {Promise<{iri: string, type: string, value: View, announcement: Announce} | {iri: string, type: string, value: DataSet, announcement: Announce} | {iri: string, type: string, value: DataService, announcement: Announce}>}
+   */
+  public async extractMember(announcementIRI: string): Promise<{ iri: string; type: string; value: View | DataSet | DataService; announcement: Announce }> {
     const memberStore = await fetchResourceAsStore(announcementIRI, this.session);
     const metadata = await extractAnnouncementsMetadata(memberStore);
     const announcementIRIs: string[] = [];
@@ -265,19 +265,19 @@ export class Curator {
     if (type.includes(TREE.Node)) {
       this.logger.debug(`View from ${announcementIRI} extracted.`);
       const content = metadata.views.get(valueIRI) as View;
-      return {type: TREE.Node, value: content, iri: announcementIRI};
+      return {type: TREE.Node, value: content, iri: announcementIRI, announcement: announcement};
     }
 
     if (type.includes(DCAT.Dataset)) {
       this.logger.debug(`DCAT dataset from ${announcementIRI} extracted.`);
       const content = metadata.datasets.get(valueIRI) as DataSet;
-      return {type: DCAT.Dataset, value: content, iri: announcementIRI};
+      return {type: DCAT.Dataset, value: content, iri: announcementIRI, announcement: announcement};
     }
 
     if (type.includes(DCAT.DataService)) {
       this.logger.debug(`DCAT Dataservice ${announcementIRI} extracted.`);
       const content = metadata.dataServices.get(valueIRI) as DataService;
-      return {type: DCAT.DataService, value: content, iri: announcementIRI};
+      return {type: DCAT.DataService, value: content, iri: announcementIRI, announcement: announcement};
     }
     throw Error(`Could not extract member from ${announcementIRI}`);
   }

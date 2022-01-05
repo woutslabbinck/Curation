@@ -1,6 +1,6 @@
 {
   "name": "@treecg/curation",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "This library implements a class (Curator) with methods to curate an announcement LDES in LDP.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
