@@ -1,13 +1,13 @@
 {
   "name": "@treecg/curation",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "This library implements a class (Curator) with methods to curate an announcement LDES in LDP.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "jest",
     "build": "rm -rf dist/; tsc",
-    "publish": "npm run build && npm publish"
+    "release": "npm run build && npm publish --access public"
   },
   "keywords": [
     "LDP",
@@ -39,6 +39,7 @@
     "@treecg/ldes-announcements": "^0.0.5",
     "@treecg/ldes-orchestrator": "^0.0.4",
     "@treecg/tree-metadata-extraction": "^1.2.1",
+    "@treecg/types": "^0.2.2",
     "dotenv": "^10.0.0",
     "loglevel": "^1.8.0",
     "loglevel-plugin-prefix": "^0.8.4",

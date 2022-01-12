@@ -10,8 +10,8 @@ import {Announce, DataService, DataSet, View} from "@treecg/ldes-announcements/d
 import {AccessSubject, ACLConfig, LDESConfig, LDESinSolid} from "@treecg/ldes-orchestrator";
 import {extractMetadata} from "@treecg/tree-metadata-extraction";
 import {Collection, Node, Relation, URI} from "@treecg/tree-metadata-extraction/dist/util/Util";
+import {LoggerBrowser as Logger} from "@treecg/types/dist/lib/utils/Logger-Browser";
 import {DataFactory, Literal, Quad, Store} from "n3";
-import {Logger} from "./logging/Logger";
 import {ldjsonToStore, memberToString, storeToString, stringToStore} from "./util/Conversion";
 import {
   fetchResourceAsStore,

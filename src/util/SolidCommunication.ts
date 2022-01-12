@@ -5,8 +5,8 @@
  * Created on 10/12/2021
  *****************************************/
 import {Session} from "@rubensworks/solid-client-authn-isomorphic";
+import {LoggerBrowser as Logger} from "@treecg/types/dist/lib/utils/Logger-Browser";
 import {Quad, Store, Writer} from "n3";
-import {Logger} from "../logging/Logger";
 import {turtleStringToStore} from "./Conversion";
 
 const logger = new Logger('SolidCommunication');
